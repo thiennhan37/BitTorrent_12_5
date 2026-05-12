@@ -1,0 +1,59 @@
+function polarToCartesian(cx, cy, radius, angleDeg) {
+  const angle = (Math.PI / 180) * angleDeg;
+  return {
+    x: cx + radius * Math.cos(angle),
+    y: cy + radius * Math.sin(angle),
+  };
+}
+
+export default function PeerNetworkGraph({ logs = [], peerCount = 10 }) {
+  const size = 460;
+  const center = size / 2;
+  const radius = 170;
+  const positions = Array.from({ length: peerCount }, (_, peerId) => {
+    const angle = -90 + (360 * peerId) / peerCount;
+    return { peerId, ...polarToCartesian(center, center, radius, angle) };
+  });
+  const recentTransfers = logs
+    .filter((log) => log.event === 'END')
+    .slice(-12)
+    .map((log) => ({ ...log, source: positions[log.sourcePeer], dest: positions[log.destinationPeer] }))
+    .filter((log) => log.source && log.dest);
+
+  return (
+    <section className="card">
+      <h2>Peer network graph</h2>
+      <p className="muted">Recent completed transfers are shown as arrows.</p>
+      <svg className="network-svg" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="peer network graph">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L8,3 z" />
+          </marker>
+        </defs>
+        {recentTransfers.map((transfer, index) => (
+          <g key={`${transfer.transferId}-${index}`} className="edge">
+            <line
+              x1={transfer.source.x}
+              y1={transfer.source.y}
+              x2={transfer.dest.x}
+              y2={transfer.dest.y}
+              markerEnd="url(#arrow)"
+            />
+            <text
+              x={(transfer.source.x + transfer.dest.x) / 2}
+              y={(transfer.source.y + transfer.dest.y) / 2}
+            >
+              c{transfer.chunkId}
+            </text>
+          </g>
+        ))}
+        {positions.map((node) => (
+          <g key={node.peerId} className="node">
+            <circle cx={node.x} cy={node.y} r="22" />
+            <text x={node.x} y={node.y + 5}>P{node.peerId}</text>
+          </g>
+        ))}
+      </svg>
+    </section>
+  );
+}
