@@ -93,3 +93,37 @@ def test_network_conditions_are_deterministic_but_source_dependent():
 
     assert first_duration == second_duration
     assert first_duration != other_source_duration
+
+def test_network_bandwidth_uses_active_transfer_counts():
+    from simulation.models import Peer
+    from simulation.network import NetworkModel
+
+    config = SimulationConfig(seed=9, bandwidth_kbps=512, latency_ms=50)
+    source = Peer(id=0, owned_chunks={0}, upload_bandwidth_kbps=512)
+    destination = Peer(id=1, download_bandwidth_kbps=512)
+    source.active_uploads[2] = 0
+    destination.active_downloads[0] = 0
+
+    bandwidth = NetworkModel(config).effective_bandwidth(source, destination)
+
+    assert bandwidth > 0
+
+
+def test_compare_api_returns_successful_result_envelope():
+    from app import app
+
+    response = app.test_client().post(
+        "/api/simulate/compare",
+        json={
+            "seed": 9,
+            "bandwidthKbps": 512,
+            "latencyMs": 50,
+            "initialChunkProbability": 0.15,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["success"] is True
+    assert body["result"]["randomFirst"]["completed"] is True
+    assert body["result"]["rarestFirst"]["completed"] is True

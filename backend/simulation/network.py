@@ -70,14 +70,16 @@ class NetworkModel:
         This fixes the unrealistic behavior where one peer could
         upload/download many chunks simultaneously at full speed.
         """
-
-        # Number of active uploads/downloads
-        upload_count = max(1, source.active_uploads)
-        download_count = max(1, destination.active_downloads)
+        # Number of active uploads/downloads. The peer stores the
+        # active transfer state in dictionaries, so use the helper
+        # methods to get numeric counts before applying max().
+        upload_count = max(1, source.upload_count())
+        download_count = max(1, destination.download_count())
 
         # Shared bandwidth
         shared_upload_bw = source.upload_bandwidth_kbps / upload_count
         shared_download_bw = destination.download_bandwidth_kbps / download_count
+
 
         # Base bottleneck bandwidth
         bandwidth = min(shared_upload_bw, shared_download_bw)

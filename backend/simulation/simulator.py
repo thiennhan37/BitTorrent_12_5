@@ -270,6 +270,7 @@ class BitTorrentSimulator:
             end_time=end_time,
             duration=actual_duration,
             bandwidth_kbps=average_bandwidth,
+            transferred_kb=self.config.chunk_size_kb,
             latency_ms=latency_ms,
         )
 
