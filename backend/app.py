@@ -27,6 +27,7 @@ def create_app() -> Flask:
     @app.post("/api/simulate")
     def simulate():
         payload = request.get_json(silent=True) or {}
+        # print("payload", payload)
         try:
             result = run_single_simulation(payload)
             return jsonify(result)

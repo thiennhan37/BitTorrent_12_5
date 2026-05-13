@@ -38,7 +38,8 @@ class RandomFirstStrategy(ChunkSelectionStrategy):
         candidates = [
             chunk_id
             for chunk_id in downloader.missing_chunks(total_chunks)
-            if downloader.can_start_download(chunk_id) and self.eligible_sources(downloader, peers, chunk_id)
+            if downloader.can_start_download(chunk_id) 
+                and self.eligible_sources(downloader, peers, chunk_id)
         ]
         if not candidates:
             return None
@@ -59,7 +60,8 @@ class RarestFirstStrategy(ChunkSelectionStrategy):
                 continue
             if not self.eligible_sources(downloader, peers, chunk_id):
                 continue
-            copies = sum(1 for peer in peers if peer.id != downloader.id and peer.has_chunk(chunk_id))
+            copies = sum(1 for peer in peers if peer.id != downloader.id
+                         and peer.can_upload_to(downloader, chunk_id) and peer.has_chunk(chunk_id))
             if copies > 0:
                 availability[chunk_id] = copies
 
