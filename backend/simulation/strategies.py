@@ -5,14 +5,15 @@ from abc import ABC, abstractmethod
 
 from .models import Peer
 
-
+# chọn ra chiến lược tải chunk và chọn peer phù hợp
 class ChunkSelectionStrategy(ABC):
     key = "base"
     display_name = "Base Strategy"
 
     def __init__(self, rng: random.Random) -> None:
         self.rng = rng
-
+        
+    # Lấy danh sách các peer có thể tải chunk
     def eligible_sources(self, downloader: Peer, peers: list[Peer], chunk_id: int) -> list[Peer]:
         return [peer for peer in peers if peer.can_upload_to(downloader, chunk_id)]
 
@@ -32,9 +33,11 @@ class RandomFirstStrategy(ChunkSelectionStrategy):
     display_name = "Random-First"
 
     def select_chunk(self, downloader: Peer, peers: list[Peer], total_chunks: int) -> int | None:
+        # kiểm tra peer có rảnh để tải không
         if not downloader.has_free_download_slot():
             return None
 
+        # Lấy danh sách các chunk mà peer chưa có và có thể bắt đầu tải
         candidates = [
             chunk_id
             for chunk_id in downloader.missing_chunks(total_chunks)
