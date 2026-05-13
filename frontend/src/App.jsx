@@ -32,7 +32,8 @@ export default function App() {
           seed: data.seed,
           bandwidthKbps: data.bandwidth_kbps ?? data.bandwidthKbps ?? 512,
           latencyMs: data.latency_ms ?? data.latencyMs ?? 50,
-          initialChunkProbability: data.initial_chunk_probability ?? 0.28,
+          // initialChunkProbability: data.initial_chunk_probability ?? 0.28,
+          initialChunkProbability: data.initial_chunk_probability ?? data.initialChunkProbability ?? 0.15,
         }));
       })
       .catch((err) => setError(err.message));

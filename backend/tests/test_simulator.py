@@ -1,4 +1,10 @@
 from __future__ import annotations
+# import sys
+# from pathlib import Path
+
+# BACKEND_ROOT = Path(__file__).resolve().parents[1]
+# if str(BACKEND_ROOT) not in sys.path:
+#     sys.path.insert(0, str(BACKEND_ROOT))
 
 from simulation.config import SimulationConfig
 from simulation.initial_state import generate_initial_state
@@ -6,6 +12,8 @@ from simulation.service import compare_strategies
 from simulation.simulator import BitTorrentSimulator
 from simulation.strategies import RarestFirstStrategy
 import random
+
+
 
 
 def test_default_config_has_40_chunks():
@@ -57,3 +65,31 @@ def test_rarest_strategy_picks_chunk_with_fewest_copies():
     strategy = RarestFirstStrategy(random.Random(5))
     selected = strategy.select_chunk(downloader, peers, total_chunks=3)
     assert selected == 1
+
+# new github 
+def test_compare_respects_initial_probability_payload():
+    low_density = compare_strategies({"seed": 9, "initialChunkProbability": 0.15})
+    higher_density = compare_strategies({"seed": 9, "initialChunkProbability": 0.30})
+
+    assert low_density["config"]["initial_chunk_probability"] == 0.15
+    assert higher_density["config"]["initial_chunk_probability"] == 0.30
+    assert low_density["initialState"] != higher_density["initialState"]
+    assert higher_density["randomFirst"]["totalTime"] != higher_density["rarestFirst"]["totalTime"]
+
+
+def test_network_conditions_are_deterministic_but_source_dependent():
+    from simulation.models import Peer
+    from simulation.network import NetworkModel
+
+    config = SimulationConfig(seed=9, bandwidth_kbps=512, latency_ms=50)
+    network = NetworkModel(config)
+    source_a = Peer(id=0, owned_chunks={0})
+    source_b = Peer(id=1, owned_chunks={0})
+    destination = Peer(id=2)
+
+    first_duration = network.transfer_time(config.chunk_size_kb, source_a, destination)
+    second_duration = network.transfer_time(config.chunk_size_kb, source_a, destination)
+    other_source_duration = network.transfer_time(config.chunk_size_kb, source_b, destination)
+
+    assert first_duration == second_duration
+    assert first_duration != other_source_duration
