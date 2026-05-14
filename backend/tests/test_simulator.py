@@ -127,3 +127,51 @@ def test_compare_api_returns_successful_result_envelope():
     assert body["success"] is True
     assert body["result"]["randomFirst"]["completed"] is True
     assert body["result"]["rarestFirst"]["completed"] is True
+
+def test_peer_process_fills_multiple_download_slots():
+    config = SimulationConfig(
+        file_size_mb=1,
+        chunk_size_kb=256,
+        peer_count=4,
+        seed=1,
+        bandwidth_kbps=256,
+        latency_ms=0,
+        max_download_slots=3,
+        max_upload_slots=3,
+    )
+
+    result = BitTorrentSimulator(
+        config=config,
+        strategy="rarestFirst",
+        initial_state=[[0, 3], [1], [2], []],
+    ).run()
+
+    destination_three_starts = [
+        log
+        for log in result["logs"]
+        if log["event"] == "START" and log["destinationPeer"] == 3
+    ]
+    first_start_time = destination_three_starts[0]["time"]
+    simultaneous_starts = [
+        log
+        for log in destination_three_starts
+        if log["time"] == first_start_time
+    ]
+
+    assert result["completed"] is True
+    assert len(simultaneous_starts) == 3
+
+
+def test_rarest_first_default_demo_is_not_slower_than_random_first():
+    result = compare_strategies(
+        {
+            "seed": 9,
+            "bandwidthKbps": 512,
+            "latencyMs": 50,
+            "initialChunkProbability": 0.15,
+        }
+    )
+
+    assert result["rarestFirst"]["completed"] is True
+    assert result["randomFirst"]["completed"] is True
+    assert result["rarestFirst"]["totalTime"] <= result["randomFirst"]["totalTime"]

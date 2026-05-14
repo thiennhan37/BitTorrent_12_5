@@ -166,20 +166,17 @@ class BitTorrentSimulator:
             }
         )
 
-    def _transfer(
+    def _schedule_transfer(
         self,
         destination: Peer,
         source: Peer,
         chunk_id: int,
-    ) -> Generator[Any, Any, None]:
-
+    ) -> bool:
         if not destination.can_start_download(chunk_id):
-            yield self.env.timeout(self.config.polling_interval)
-            return
+            return False
 
         if not source.can_upload_to(destination, chunk_id):
-            yield self.env.timeout(self.config.polling_interval)
-            return
+            return False
 
         destination.start_transfer_from(source, chunk_id)
 
@@ -188,12 +185,10 @@ class BitTorrentSimulator:
         transfer_id = self.transfer_counter
         self.transfer_counter += 1
 
-        latency_ms = max(
-            source.latency_ms,
-            destination.latency_ms,
+        latency_ms = self.network.effective_latency_ms(
+            source,
+            destination,
         )
-
-        remaining_kb = self.config.chunk_size_kb
 
         self._log_event(
             event="START",
@@ -208,10 +203,41 @@ class BitTorrentSimulator:
         )
 
         # simulate network latency first
+        self.env.process(
+            self._transfer(
+                destination=destination,
+                source=source,
+                chunk_id=chunk_id,
+                transfer_id=transfer_id,
+                start_time=start_time,
+                latency_ms=latency_ms,
+            )
+        )
+
+        return True
+
+    def _transfer(
+        self,
+        *,
+        destination: Peer,
+        source: Peer,
+        chunk_id: int,
+        transfer_id: int,
+        start_time: float,
+        latency_ms: float,
+    ) -> Generator[Any, Any, None]:
+
+        remaining_kb = float(self.config.chunk_size_kb)
+
+        # Simulate per-link latency first. The latency now uses NetworkModel so
+        # logs, records, and transfer timing all use the same link model.
         yield self.env.timeout(latency_ms / 1000.0)
 
-        # dynamic bandwidth simulation
-        step_time = 0.05  # 50ms virtual step
+        # Dynamic bandwidth simulation. Recompute effective bandwidth often so
+        # active upload/download sharing is reflected during the transfer, but
+        # finish the last slice exactly instead of always rounding up by a full
+        # step.
+        step_time = 0.05
 
         while remaining_kb > 0:
             if self.completed:
@@ -239,11 +265,13 @@ class BitTorrentSimulator:
                 yield self.env.timeout(step_time)
                 continue
 
-            transferred_kb = bandwidth * step_time
+            transfer_slice = min(
+                step_time,
+                remaining_kb / bandwidth,
+            )
+            remaining_kb -= bandwidth * transfer_slice
 
-            remaining_kb -= transferred_kb
-
-            yield self.env.timeout(step_time)
+            yield self.env.timeout(transfer_slice)
 
         destination.finish_transfer_from(
             source,
@@ -294,6 +322,40 @@ class BitTorrentSimulator:
             self.completed = True
             self.total_completion_time = end_time
 
+    def _select_source(
+        self,
+        peer: Peer,
+        chunk_id: int,
+    ) -> Peer | None:
+        sources = self.strategy.eligible_sources(
+            peer,
+            self.peers,
+            chunk_id,
+        )
+
+        if not sources:
+            return None
+
+        if self.strategy.key != "rarestFirst":
+            return self.strategy.select_source(
+                peer,
+                self.peers,
+                chunk_id,
+            )
+
+        best_bandwidth = max(
+            self.network.projected_transfer_bandwidth(source, peer)
+            for source in sources
+        )
+        best_sources = [
+            source
+            for source in sources
+            if self.network.projected_transfer_bandwidth(source, peer)
+            == best_bandwidth
+        ]
+        return self.rng.choice(best_sources)
+
+
     def _peer_process(
         self,
         peer: Peer,
@@ -330,9 +392,8 @@ class BitTorrentSimulator:
                 )
                 continue
 
-            source = self.strategy.select_source(
+            source = self._select_source(
                 peer,
-                self.peers,
                 chunk_id,
             )
 
@@ -342,11 +403,22 @@ class BitTorrentSimulator:
                 )
                 continue
 
-            yield from self._transfer(
+            if not self._schedule_transfer(
                 peer,
                 source,
                 chunk_id,
-            )
+            ):
+                yield self.env.timeout(
+                    self.config.polling_interval
+                )
+                continue
+
+            # Keep this peer process alive and let scheduled transfer processes
+            # run independently. This makes max_download_slots meaningful:
+            # on the next loop the peer can fill another free slot instead of
+            # blocking until the current chunk completes.
+            yield self.env.timeout(0)
+            
 
     def run(self) -> dict[str, Any]:
 

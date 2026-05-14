@@ -90,6 +90,28 @@ class NetworkModel:
         # Prevent zero / absurdly tiny bandwidth
         return max(1.0, bandwidth)
 
+    def projected_transfer_bandwidth(
+        self,
+        source: Peer,
+        destination: Peer,
+    ) -> float:
+        """Estimate link bandwidth after starting one new transfer.
+
+        Source selection needs the projected state, not only the current
+        active-transfer state. Otherwise a busy source with one upload can look
+        as fast as an idle source before the new upload is registered.
+        """
+        upload_count = max(1, source.upload_count() + 1)
+        download_count = max(1, destination.download_count() + 1)
+
+        shared_upload_bw = source.upload_bandwidth_kbps / upload_count
+        shared_download_bw = destination.download_bandwidth_kbps / download_count
+
+        bandwidth = min(shared_upload_bw, shared_download_bw)
+        bandwidth *= self.link_bandwidth_factor(source, destination)
+
+        return max(1.0, bandwidth)
+
     # =========================================================
     # Transfer timing
     # =========================================================

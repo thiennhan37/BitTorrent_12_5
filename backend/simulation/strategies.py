@@ -23,6 +23,30 @@ class ChunkSelectionStrategy(ABC):
             return None
         return self.rng.choice(sources)
 
+    def _choose_from_best_sources(
+        self,
+        downloader: Peer,
+        sources: list[Peer],
+    ) -> Peer | None:
+        if not sources:
+            return None
+
+        def projected_score(source: Peer) -> float:
+            projected_upload_count = max(1, source.upload_count() + 1)
+            projected_download_count = max(1, downloader.download_count() + 1)
+            return min(
+                source.upload_bandwidth_kbps / projected_upload_count,
+                downloader.download_bandwidth_kbps / projected_download_count,
+            )
+
+        best_score = max(projected_score(source) for source in sources)
+        best_sources = [
+            source
+            for source in sources
+            if projected_score(source) == best_score
+        ]
+        return self.rng.choice(best_sources)
+
     @abstractmethod
     def select_chunk(self, downloader: Peer, peers: list[Peer], total_chunks: int) -> int | None:
         raise NotImplementedError
@@ -61,10 +85,18 @@ class RarestFirstStrategy(ChunkSelectionStrategy):
         for chunk_id in downloader.missing_chunks(total_chunks):
             if not downloader.can_start_download(chunk_id):
                 continue
+
+            # A chunk is selectable only if it has a source that can serve the
+            # downloader right now, but its rarity is the GLOBAL swarm copy
+            # count. Counting only currently-free uploaders makes a popular
+            # chunk look artificially rare whenever its owners are busy.
             if not self.eligible_sources(downloader, peers, chunk_id):
                 continue
-            copies = sum(1 for peer in peers if peer.id != downloader.id
-                         and peer.can_upload_to(downloader, chunk_id) and peer.has_chunk(chunk_id))
+            copies = sum(
+                1
+                for peer in peers
+                if peer.id != downloader.id and peer.has_chunk(chunk_id)
+            )
             if copies > 0:
                 availability[chunk_id] = copies
 
@@ -72,9 +104,18 @@ class RarestFirstStrategy(ChunkSelectionStrategy):
             return None
 
         rarest_count = min(availability.values())
-        rarest_chunks = [chunk_id for chunk_id, count in availability.items() if count == rarest_count]
+        rarest_chunks = [
+            chunk_id
+            for chunk_id, count in availability.items()
+            if count == rarest_count
+        ]
         return self.rng.choice(rarest_chunks)
-
+        
+    def select_source(self, downloader: Peer, peers: list[Peer], chunk_id: int) -> Peer | None:
+        return self._choose_from_best_sources(
+            downloader,
+            self.eligible_sources(downloader, peers, chunk_id),
+        )
 
 def normalize_strategy_key(strategy: str) -> str:
     normalized = (strategy or "").replace("-", "").replace("_", "").lower()
