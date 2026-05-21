@@ -7,38 +7,29 @@ from typing import Any, Mapping
 
 @dataclass(slots=True)
 class SimulationConfig:
-    """
-    Configuration shared by API, simulator, and tests.
+    """Configuration shared by API, simulator, and tests.
 
-    Bandwidth unit:
-        KB/s
-
-    Transfer formula:
-    effective_bandwidth = total_bandwidth / active_transfers
-
-    download_time =
-        latency + chunk_size / effective_bandwidth
+    Notes:
+        The assignment formula is `download_time = latency + chunk_size / bandwidth`.
+        To keep that formula direct and easy to explain, bandwidth is stored as KB/s.
+        The field name keeps `kbps` because the original project files already used it.
     """
 
-    # File settings
     file_size_mb: int = 10
     chunk_size_kb: int = 256
-
-    # Peer settings
     peer_count: int = 10
     seed: int = 9
     initial_chunk_probability: float = 0.15
-
-    # Network settings
     bandwidth_kbps: float = 512.0
     upload_bandwidth_kbps: float | None = None
     latency_ms: float = 50.0
-
-    # Parallel transfer limits
-    max_download_slots: int = 3
+    max_download_slots: int = 2
     max_upload_slots: int = 3
-
-    # Simulation timing
+    # Do lon moi buoc mo phong khi truyen chunk.
+    # Moi tick se tinh lai bandwidth theo so transfer dang active, nen transfer
+    # moi/transfer ket thuc se anh huong den cac transfer con lai o tick ke tiep.
+    transfer_tick_duration: float = 0.1
+    # Giu lai de tuong thich payload/cu phan UI; scheduler moi khong dung polling lien tuc.
     polling_interval: float = 0.02
     max_virtual_time: float = 20_000.0
 
@@ -52,82 +43,49 @@ class SimulationConfig:
 
     @property
     def effective_upload_bandwidth_kbps(self) -> float:
-        """
-        Upload bandwidth fallback.
-
-        If upload bandwidth is not specified,
-        reuse the generic bandwidth value.
-        """
-        return (
-            self.upload_bandwidth_kbps
-            if self.upload_bandwidth_kbps is not None
-            else self.bandwidth_kbps
-        )
-
-    @property
-    def latency_seconds(self) -> float:
-        return self.latency_ms / 1000.0
+        return self.upload_bandwidth_kbps or self.bandwidth_kbps
 
     def validate(self) -> None:
         if self.file_size_mb <= 0:
             raise ValueError("file_size_mb must be > 0")
-
         if self.chunk_size_kb <= 0:
             raise ValueError("chunk_size_kb must be > 0")
-
         if self.peer_count <= 1:
             raise ValueError("peer_count must be > 1")
-
         if not 0 < self.initial_chunk_probability < 1:
-            raise ValueError(
-                "initial_chunk_probability must be between 0 and 1"
-            )
-
+            raise ValueError("initial_chunk_probability must be between 0 and 1")
         if self.bandwidth_kbps <= 0:
             raise ValueError("bandwidth_kbps must be > 0")
-
         if self.effective_upload_bandwidth_kbps <= 0:
             raise ValueError("upload_bandwidth_kbps must be > 0")
-
         if self.latency_ms < 0:
             raise ValueError("latency_ms must be >= 0")
-
         if self.max_download_slots <= 0:
             raise ValueError("max_download_slots must be > 0")
-
         if self.max_upload_slots <= 0:
             raise ValueError("max_upload_slots must be > 0")
-
+        if self.transfer_tick_duration <= 0:
+            raise ValueError("transfer_tick_duration must be > 0")
         if self.polling_interval <= 0:
             raise ValueError("polling_interval must be > 0")
-
         if self.max_virtual_time <= 0:
             raise ValueError("max_virtual_time must be > 0")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
-
         data.update(
             {
                 "fileSizeKb": self.file_size_kb,
                 "totalChunks": self.total_chunks,
-                "effectiveUploadBandwidthKbps":
-                    self.effective_upload_bandwidth_kbps,
-                "latencySeconds": self.latency_seconds,
+                "effectiveUploadBandwidthKbps": self.effective_upload_bandwidth_kbps,
                 "bandwidthUnit": "KB/s",
                 "timeUnit": "seconds",
-                "supportsBandwidthSharing": True,
             }
         )
-
         return data
 
     @classmethod
-    def from_payload(
-        cls,
-        payload: Mapping[str, Any] | None,
-    ) -> "SimulationConfig":
-
+    def from_payload(cls, payload: Mapping[str, Any] | None) -> "SimulationConfig":
         payload = dict(payload or {})
         defaults = cls()
 
@@ -138,37 +96,10 @@ class SimulationConfig:
             return default
 
         config = cls(
-            file_size_mb=int(
-                pick(
-                    "fileSizeMb",
-                    "file_size_mb",
-                    default=defaults.file_size_mb,
-                )
-            ),
-
-            chunk_size_kb=int(
-                pick(
-                    "chunkSizeKb",
-                    "chunk_size_kb",
-                    default=defaults.chunk_size_kb,
-                )
-            ),
-
-            peer_count=int(
-                pick(
-                    "peerCount",
-                    "peer_count",
-                    default=defaults.peer_count,
-                )
-            ),
-
-            seed=int(
-                pick(
-                    "seed",
-                    default=defaults.seed,
-                )
-            ),
-
+            file_size_mb=int(pick("fileSizeMb", "file_size_mb", default=defaults.file_size_mb)),
+            chunk_size_kb=int(pick("chunkSizeKb", "chunk_size_kb", default=defaults.chunk_size_kb)),
+            peer_count=int(pick("peerCount", "peer_count", default=defaults.peer_count)),
+            seed=int(pick("seed", default=defaults.seed)),
             initial_chunk_probability=float(
                 pick(
                     "initialChunkProbability",
@@ -176,24 +107,13 @@ class SimulationConfig:
                     default=defaults.initial_chunk_probability,
                 )
             ),
-
             bandwidth_kbps=float(
-                pick(
-                    "bandwidth",
-                    "bandwidthKbps",
-                    "bandwidth_kbps",
-                    default=defaults.bandwidth_kbps,
-                )
+                pick("bandwidth", "bandwidthKbps", "bandwidth_kbps", default=defaults.bandwidth_kbps)
             ),
-
             upload_bandwidth_kbps=(
                 None
-                if pick(
-                    "uploadBandwidth",
-                    "uploadBandwidthKbps",
-                    "upload_bandwidth_kbps",
-                    default=None,
-                ) is None
+                if pick("uploadBandwidth", "uploadBandwidthKbps", "upload_bandwidth_kbps", default=None)
+                is None
                 else float(
                     pick(
                         "uploadBandwidth",
@@ -203,48 +123,21 @@ class SimulationConfig:
                     )
                 )
             ),
-
-            latency_ms=float(
-                pick(
-                    "latency",
-                    "latencyMs",
-                    "latency_ms",
-                    default=defaults.latency_ms,
-                )
-            ),
-
+            latency_ms=float(pick("latency", "latencyMs", "latency_ms", default=defaults.latency_ms)),
             max_download_slots=int(
+                pick("maxDownloadSlots", "max_download_slots", default=defaults.max_download_slots)
+            ),
+            max_upload_slots=int(pick("maxUploadSlots", "max_upload_slots", default=defaults.max_upload_slots)),
+            transfer_tick_duration=float(
                 pick(
-                    "maxDownloadSlots",
-                    "max_download_slots",
-                    default=defaults.max_download_slots,
+                    "transferTickDuration",
+                    "tickDuration",
+                    "transfer_tick_duration",
+                    default=defaults.transfer_tick_duration,
                 )
             ),
-
-            max_upload_slots=int(
-                pick(
-                    "maxUploadSlots",
-                    "max_upload_slots",
-                    default=defaults.max_upload_slots,
-                )
-            ),
-
-            polling_interval=float(
-                pick(
-                    "pollingInterval",
-                    "polling_interval",
-                    default=defaults.polling_interval,
-                )
-            ),
-
-            max_virtual_time=float(
-                pick(
-                    "maxVirtualTime",
-                    "max_virtual_time",
-                    default=defaults.max_virtual_time,
-                )
-            ),
+            polling_interval=float(pick("pollingInterval", "polling_interval", default=defaults.polling_interval)),
+            max_virtual_time=float(pick("maxVirtualTime", "max_virtual_time", default=defaults.max_virtual_time)),
         )
-
         config.validate()
         return config

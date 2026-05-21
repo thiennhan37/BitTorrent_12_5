@@ -14,6 +14,22 @@ except ModuleNotFoundError:  # pragma: no cover - exercised only in minimal grad
 if _real_simpy is not None:
     Environment = _real_simpy.Environment
 else:
+    class Event:
+        def __init__(self, env: "Environment") -> None:
+            self.env = env
+            self.triggered = False
+            self._waiters: list[Generator[Any, Any, Any]] = []
+
+        def succeed(self) -> "Event":
+            if self.triggered:
+                return self
+            self.triggered = True
+            for generator in self._waiters:
+                self.env._schedule(generator, self.env.now)
+            self._waiters.clear()
+            return self
+
+
     class Timeout:
         def __init__(self, env: "Environment", delay: float) -> None:
             self.env = env
@@ -33,11 +49,17 @@ else:
             self._counter = itertools.count()
             self._queue: list[tuple[float, int, Generator[Any, Any, Any]]] = []
 
+        def _schedule(self, generator: Generator[Any, Any, Any], scheduled_time: float) -> None:
+            heapq.heappush(self._queue, (scheduled_time, next(self._counter), generator))
+
+        def event(self) -> Event:
+            return Event(self)
+
         def timeout(self, delay: float) -> Timeout:
             return Timeout(self, delay)
 
         def process(self, generator: Generator[Any, Any, Any]) -> Generator[Any, Any, Any]:
-            heapq.heappush(self._queue, (self.now, next(self._counter), generator))
+            self._schedule(generator, self.now)
             return generator
 
         def run(self, until: float | None = None) -> None:
@@ -56,10 +78,13 @@ else:
                     continue
 
                 if isinstance(yielded, Timeout):
-                    next_time = self.now + yielded.delay
+                    self._schedule(generator, self.now + yielded.delay)
                 elif isinstance(yielded, (int, float)):
-                    next_time = self.now + max(float(yielded), 0.0)
+                    self._schedule(generator, self.now + max(float(yielded), 0.0))
+                elif isinstance(yielded, Event):
+                    if yielded.triggered:
+                        self._schedule(generator, self.now)
+                    else:
+                        yielded._waiters.append(generator)
                 else:
-                    next_time = self.now
-
-                heapq.heappush(self._queue, (next_time, next(self._counter), generator))
+                    self._schedule(generator, self.now)

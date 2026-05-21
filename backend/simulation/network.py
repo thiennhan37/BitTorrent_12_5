@@ -10,145 +10,72 @@ from .models import Peer
 class NetworkModel:
     config: SimulationConfig
 
-    # =========================================================
-    # Stable deterministic per-link random
-    # =========================================================
-
     def _link_unit(self, source: Peer, destination: Peer, salt: int) -> float:
+        """Return a stable 0..1 value for a directed source->destination link.
+
+        The simulator runs each strategy in a separate process/environment when
+        comparing them, so network conditions must not come from the mutable RNG
+        sequence used by a strategy. This deterministic per-link value keeps the
+        same seed, source, and destination under the same virtual network for
+        Random-First and Rarest-First, while still making source choice matter.
+        """
+
         value = (
             (self.config.seed + 1) * 1_000_003
             + (source.id + 1) * 91_193
             + (destination.id + 1) * 35_017
             + salt * 7_919
         ) & 0xFFFFFFFF
-
         value ^= value >> 16
         value = (value * 0x7FEB352D) & 0xFFFFFFFF
-
         value ^= value >> 15
         value = (value * 0x846CA68B) & 0xFFFFFFFF
-
         value ^= value >> 16
-
         return value / 0xFFFFFFFF
 
-    # =========================================================
-    # Link quality
-    # =========================================================
-
     def link_bandwidth_factor(self, source: Peer, destination: Peer) -> float:
-        """
-        Stable bandwidth multiplier for each directed link.
-        Range: 65% -> 135%
-        """
-        return 0.65 + self._link_unit(source, destination, salt=1) * 0.70
-
+        # Directed peer links vary between 65% and 100% of the shared peer capacity.
+        # Keeping the factor <= 1 preserves the per-peer bandwidth budget while still
+        # making source choice deterministic and network-dependent.
+        return 0.65 + self._link_unit(source, destination, salt=1) * 0.35
+    
+    def effective_latency_ms(self, source: Peer, destination: Peer) -> float:
+        base_latency_ms = max(self.config.latency_ms, source.latency_ms, destination.latency_ms)
+        return base_latency_ms * self.link_latency_factor(source, destination)
+    
     def link_latency_factor(self, source: Peer, destination: Peer) -> float:
-        """
-        Stable latency multiplier for each directed link.
-        Range: 75% -> 175%
-        """
+        # Directed peer links vary between 75% and 175% of the configured base.
         return 0.75 + self._link_unit(source, destination, salt=2)
 
-    # =========================================================
-    # Effective network conditions
-    # =========================================================
+    def shared_upload_bandwidth(self, source: Peer) -> float:
+        # Upload cua mot peer duoc chia deu cho tat ca upload dang active.
+        # max(..., 1) giup ham van an toan khi duoc goi de uoc luong truoc luc reserve.
+        active_uploads = max(source.active_upload_count, 1)
+        return source.upload_bandwidth_kbps / active_uploads
 
-    def effective_latency_ms(self, source: Peer, destination: Peer) -> float:
-        base_latency_ms = max(
-            self.config.latency_ms,
-            source.latency_ms,
-            destination.latency_ms,
-        )
-
-        return base_latency_ms * self.link_latency_factor(source, destination)
+    def shared_download_bandwidth(self, destination: Peer) -> float:
+        # Download cua mot peer cung duoc chia deu cho cac download dang active.
+        # Khi transfer moi bat dau/ket thuc, count nay thay doi va tick ke tiep se thay bandwidth moi.
+        active_downloads = max(destination.active_download_count, 1)
+        return destination.download_bandwidth_kbps / active_downloads
 
     def effective_bandwidth(self, source: Peer, destination: Peer) -> float:
+        # Bandwidth thuc te cua link bi gioi han boi ca uploader va downloader.
+        # link_bandwidth_factor tao khac biet deterministic giua cac cap peer,
+        # giup source choice co anh huong nhung van cong bang giua hai strategy.
+        shared_bandwidth = min(
+            self.shared_upload_bandwidth(source),
+            self.shared_download_bandwidth(destination),
+        )
+        return shared_bandwidth * self.link_bandwidth_factor(source, destination)
+
+    def transfer_time(self, chunk_size_kb: int, source: Peer, destination: Peer) -> tuple[float, float, float]:
+        """Return a static estimate for compatibility and tests.
+
+        The simulator no longer relies on this for active transfers. Real transfers
+        recalculate ``effective_bandwidth`` every simulation tick.
         """
-        Bandwidth is shared across ALL active transfers.
-
-        This fixes the unrealistic behavior where one peer could
-        upload/download many chunks simultaneously at full speed.
-        """
-        # Number of active uploads/downloads. The peer stores the
-        # active transfer state in dictionaries, so use the helper
-        # methods to get numeric counts before applying max().
-        upload_count = max(1, source.upload_count())
-        download_count = max(1, destination.download_count())
-
-        # Shared bandwidth
-        shared_upload_bw = source.upload_bandwidth_kbps / upload_count
-        shared_download_bw = destination.download_bandwidth_kbps / download_count
-
-
-        # Base bottleneck bandwidth
-        bandwidth = min(shared_upload_bw, shared_download_bw)
-
-        # Per-link quality factor
-        bandwidth *= self.link_bandwidth_factor(source, destination)
-
-        # Prevent zero / absurdly tiny bandwidth
-        return max(1.0, bandwidth)
-
-    def projected_transfer_bandwidth(
-        self,
-        source: Peer,
-        destination: Peer,
-    ) -> float:
-        """Estimate link bandwidth after starting one new transfer.
-
-        Source selection needs the projected state, not only the current
-        active-transfer state. Otherwise a busy source with one upload can look
-        as fast as an idle source before the new upload is registered.
-        """
-        upload_count = max(1, source.upload_count() + 1)
-        download_count = max(1, destination.download_count() + 1)
-
-        shared_upload_bw = source.upload_bandwidth_kbps / upload_count
-        shared_download_bw = destination.download_bandwidth_kbps / download_count
-
-        bandwidth = min(shared_upload_bw, shared_download_bw)
-        bandwidth *= self.link_bandwidth_factor(source, destination)
-
-        return max(1.0, bandwidth)
-
-    # =========================================================
-    # Transfer timing
-    # =========================================================
-    def effective_transfer_bandwidth(
-        self,
-        source: Peer,
-        destination: Peer,
-    ) -> float:
-        """
-        Backward-compatible wrapper.
-
-        Older simulator/service code still calls
-        effective_transfer_bandwidth().
-        """
-        return self.effective_bandwidth(source, destination)
-    
-    def transfer_time(
-        self,
-        chunk_size_kb: int,
-        source: Peer,
-        destination: Peer,
-    ) -> tuple[float, float, float]:
-        """
-        Returns:
-            (
-                duration_seconds,
-                effective_bandwidth_kBps,
-                latency_ms,
-            )
-        """
-
         bandwidth = self.effective_bandwidth(source, destination)
-
         latency_ms = self.effective_latency_ms(source, destination)
-
-        transfer_seconds = chunk_size_kb / bandwidth
-
-        duration = latency_ms / 1000.0 + transfer_seconds
-
+        duration = latency_ms / 1000.0 + chunk_size_kb / bandwidth
         return duration, bandwidth, latency_ms

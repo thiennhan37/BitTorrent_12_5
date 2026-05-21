@@ -6,10 +6,10 @@ async function request(path, options = {}) {
     ...options,
   });
   const data = await response.json();
-  if (!response.ok || data?.success === false) {
-    throw new Error(data?.error || `Request failed: ${response.status}`);
+  if (!response.ok) {
+    throw new Error(data.error || `Request failed: ${response.status}`);
   }
-  return data?.result ?? data;
+  return data;
 }
 
 export function getConfig() {

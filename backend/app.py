@@ -8,134 +8,47 @@ except ModuleNotFoundError:  # pragma: no cover
     CORS = None
 
 from simulation.config import SimulationConfig
-from simulation.service import (
-    compare_strategies,
-    run_single_simulation,
-)
+from simulation.service import compare_strategies, run_single_simulation
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
-
     if CORS is not None:
         CORS(app)
+    else:
+        @app.after_request
+        def add_cors_headers(response):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            return response
 
-    # ---------------------------------------------------------
-    # Health check
-    # ---------------------------------------------------------
     @app.get("/api/health")
     def health():
-        return jsonify(
-            {
-                "status": "ok",
-            }
-        )
+        return jsonify({"status": "ok"})
 
-    # ---------------------------------------------------------
-    # Default config
-    # ---------------------------------------------------------
     @app.get("/api/config")
     def get_config():
-        config = SimulationConfig()
+        return jsonify(SimulationConfig().to_dict())
 
-        return jsonify(config.to_dict())
-
-    # ---------------------------------------------------------
-    # Single simulation
-    # ---------------------------------------------------------
     @app.post("/api/simulate")
     def simulate():
-        payload = request.get_json(silent=True)
-
-        if payload is None:
-            payload = {}
-
+        payload = request.get_json(silent=True) or {}
+        # print("payload", payload)
         try:
             result = run_single_simulation(payload)
+            return jsonify(result)
+        except Exception as exc:  # keep API friendly for frontend demos
+            return jsonify({"error": str(exc)}), 400
 
-            return jsonify(
-                {
-                    "success": True,
-                    "result": result,
-                }
-            )
-
-        except ValueError as exc:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": str(exc),
-                    "type": "validation_error",
-                }
-            ), 400
-
-        except Exception as exc:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": str(exc),
-                    "type": "simulation_error",
-                }
-            ), 500
-
-    # ---------------------------------------------------------
-    # Strategy comparison
-    # ---------------------------------------------------------
     @app.post("/api/simulate/compare")
     def compare():
-        payload = request.get_json(silent=True)
-
-        if payload is None:
-            payload = {}
-
+        payload = request.get_json(silent=True) or {}
         try:
             result = compare_strategies(payload)
-
-            return jsonify(
-                {
-                    "success": True,
-                    "result": result,
-                }
-            )
-
-        except ValueError as exc:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": str(exc),
-                    "type": "validation_error",
-                }
-            ), 400
-
+            return jsonify(result)
         except Exception as exc:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": str(exc),
-                    "type": "comparison_error",
-                }
-            ), 500
-
-    # ---------------------------------------------------------
-    # Global error handler
-    # ---------------------------------------------------------
-    @app.errorhandler(404)
-    def not_found(_):
-        return jsonify(
-            {
-                "success": False,
-                "error": "Endpoint not found",
-            }
-        ), 404
-
-    @app.errorhandler(405)
-    def method_not_allowed(_):
-        return jsonify(
-            {
-                "success": False,
-                "error": "Method not allowed",
-            }
-        ), 405
+            return jsonify({"error": str(exc)}), 400
 
     return app
 
@@ -144,8 +57,4 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=True,
-    )
+    app.run(host="0.0.0.0", port=5000, debug=True)
