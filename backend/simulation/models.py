@@ -13,10 +13,12 @@ class Peer:
     latency_ms: float = 50.0
     max_download_slots: int = 1
     max_upload_slots: int = 3
-    # active_downloads va active_uploads dong vai tro "reservation table".
-    # Scheduler ghi vao day ngay khi start transfer de tranh 2 process cung lay
-    # mot download/upload slot trong cung thoi diem simulation.
+    # can unique chunk_id cho moi transfer, de tranh tinh huong 
+    # 2 transfer cung chunk tu 2 source khac nhau  
     active_downloads: dict[int, int] = field(default_factory=dict)  # chunk_id -> source_peer_id
+    
+    # can unique chunk_id cho moi transfer, de tranh tinh huong
+    # cung upload 1 luc nhieu chunk cung 1 destination
     active_uploads: dict[int, int] = field(default_factory=dict)  # destination_peer_id -> chunk_id
 
     def has_chunk(self, chunk_id: int) -> bool:

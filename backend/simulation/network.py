@@ -33,12 +33,14 @@ class NetworkModel:
         value ^= value >> 16
         return value / 0xFFFFFFFF
 
+    # điều chỉnh 65-100% cho khả năng thực tế của băng thông
     def link_bandwidth_factor(self, source: Peer, destination: Peer) -> float:
         # Directed peer links vary between 65% and 100% of the shared peer capacity.
         # Keeping the factor <= 1 preserves the per-peer bandwidth budget while still
         # making source choice deterministic and network-dependent.
         return 0.65 + self._link_unit(source, destination, salt=1) * 0.35
-    
+
+    # điều chỉnh 75-175% cho độ trễ thực tế
     def effective_latency_ms(self, source: Peer, destination: Peer) -> float:
         base_latency_ms = max(self.config.latency_ms, source.latency_ms, destination.latency_ms)
         return base_latency_ms * self.link_latency_factor(source, destination)

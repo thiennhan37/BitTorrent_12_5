@@ -42,14 +42,20 @@ button { cursor: pointer; }
 .muted { color: #64748b; }
 .alert { border-radius: 16px; background: #fef2f2; color: #991b1b; padding: 14px 18px; margin-bottom: 18px; }
 
-.config-panel { display: grid; gap: 20px; }
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px; /* Đẩy hàng nút và các khối lớn cách nhau ra */
+}
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
+  /* Chia cố định thành 4 cột bằng nhau hoàn toàn trên màn hình lớn */
+  grid-template-columns: repeat(4, minmax(0, 1fr)); 
+  gap: 16px;
 }
 label { display: grid; gap: 6px; font-weight: 700; color: #334155; }
 input, select {
+  width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 10px 12px;
@@ -127,3 +133,39 @@ th { color: #475569; font-size: 0.82rem; text-transform: uppercase; letter-spaci
 .timeline-peers { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
 .timeline-peer { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; }
 .timeline-peer > span { float: right; color: #64748b; }
+
+
+.form-group-section h3 {
+  margin-top: 8px;     /* Khoảng cách phía trên tiêu đề nhóm */
+  margin-bottom: 12px; /* Khoảng cách từ tiêu đề đến các ô input bên dưới */
+  font-size: 1rem;     /* Đảm bảo cỡ chữ vừa vặn, không bị quá to */
+  color: #475569;      /* Màu chữ xám đậm cho đồng bộ với hệ thống màu của bạn */
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px; /* Khoảng cách giữa nhóm Network và nhóm Simulation */
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-field label {
+  font-weight: 700;
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 900px) {
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 500px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

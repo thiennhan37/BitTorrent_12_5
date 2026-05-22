@@ -30,10 +30,10 @@ class BitTorrentSimulator:
         self.config.validate()
         self.strategy_key = strategy
         self.rng = random.Random(self.config.seed)
-        self.strategy = build_strategy(strategy, self.rng)
         self.initial_state = clone_initial_state(initial_state) if initial_state is not None else generate_initial_state(self.config)
         self.env = Environment()
         self.network = NetworkModel(self.config)
+        self.strategy = build_strategy(strategy, self.rng, self.network)
         # Global event dung de danh thuc tat ca peer khi swarm co thay doi quan trong:
         # chunk moi xuat hien hoac slot/bandwidth duoc giai phong sau khi transfer ket thuc.
         self.swarm_event = self.env.event()
@@ -72,6 +72,7 @@ class BitTorrentSimulator:
             for chunk_id in range(self.config.total_chunks)
         }
 
+    # tạo ra các snapshot để hiển thị tiến trình
     def _progress_snapshot(self) -> dict[str, Any]:
         peer_snapshots = [peer.to_dict(self.config.total_chunks) for peer in self.peers]
         average = round(sum(peer["completion"] for peer in peer_snapshots) / len(peer_snapshots), 2)
@@ -79,21 +80,24 @@ class BitTorrentSimulator:
             "time": round(float(self.env.now), 6),
             "averageCompletion": average,
             "completedPeers": sum(1 for peer in self.peers if peer.is_complete(self.config.total_chunks)),
-            "peers": peer_snapshots,
+            "peers": peer_snapshots, 
         }
-
-    def _record_progress(self) -> None:
+  
+    def _record_progress(self) -> None:  
         snapshot = self._progress_snapshot()
-        # Avoid duplicate snapshots at exactly the same time with unchanged average.
+        # kiểm tra timeline đang rỗng hoặc không duplicate với timeline cuối thì thêm vào lịch sử.
         if not self.progress_timeline or self.progress_timeline[-1] != snapshot:
             self.progress_timeline.append(snapshot)
 
+    # flush event khi hệ thống có thay đổi, đánh thức các peer đang ngủ hoạt động lấy chunk tiếp.
     def _wake_swarm(self) -> None:
         """Flush the global event and replace it for the next scheduling wave."""
 
-        # SimPy Event chi succeed mot lan, nen sau khi flush phai tao event moi
-        # de cac peer co the tiep tuc ngu cho lan thay doi tiep theo.
-        if not self.swarm_event.triggered:
+        # đẩm bảo các event chưa được đánh dấu trigger(chưa được kích hoạt)
+        # nếu đã triggered mà đánh dấu succeed lần nữa sẽ lỗi 
+        if not self.swarm_event.triggered: 
+            # SimPy Event chi succeed mot lan, nen sau khi flush phai tao event moi
+            # de cac peer co the tiep tuc ngu cho lan thay doi tiep theo.
             self.swarm_event.succeed()
         self.swarm_event = self.env.event()
 
@@ -134,7 +138,7 @@ class BitTorrentSimulator:
         if not destination.can_start_download(chunk_id) or not source.can_upload_to(destination, chunk_id):
             return False
 
-        # Reserve slot ngay lap tuc. Vi SimPy xu ly event tuan tu trong cung simulation time,
+        # Reserve slot ngay lập tức. Vi SimPy xu ly event tuan tu trong cung simulation time,
         # peer tiep theo se thay slot nay da bi chiem va khong schedule trung.
         destination.start_transfer_from(source, chunk_id)
         start_time = float(self.env.now)
@@ -182,7 +186,7 @@ class BitTorrentSimulator:
     ) -> Generator[Any, Any, None]:
         latency_seconds = latency_ms / 1000.0
         if latency_seconds > 0:
-            # Latency la delay co dinh truoc khi payload bat dau di qua link.
+            # Latency cố định trước khi payload bắt đầu đi qua link.
             yield self.env.timeout(latency_seconds)
 
         remaining_kb = float(self.config.chunk_size_kb)
@@ -190,9 +194,8 @@ class BitTorrentSimulator:
         tick_duration = self.config.transfer_tick_duration
 
         while remaining_kb > 1e-9:
-            # Diem quan trong: bandwidth khong bi dong bang luc START.
-            # Moi tick doc lai active_upload_count/active_download_count nen cac transfer
-            # moi hoac vua ket thuc se lam bandwidth giam/tang ngay o tick ke tiep.
+            # Mỗi tick đọc lại active_upload_count/active_download_count nên các transfer
+            # mới hoặc vừa kết thúc sẽ làm bandwidth giảm/tăng ngay ở tick kế tiếp.
             bandwidth = self.network.effective_bandwidth(source, destination)
             if bandwidth <= 0:
                 raise RuntimeError(
@@ -201,8 +204,9 @@ class BitTorrentSimulator:
                 )
 
             current_tick = min(tick_duration, remaining_kb / bandwidth)
+            # pause process này, các process khác vẫn chạy bình thường.
             yield self.env.timeout(current_tick)
-            # Sau khi simulation time tien len current_tick, tru dung luong payload vua truyen.
+            # Sau khi simulation time tiến lên current_tick, trừ dung lượng payload vừa truyền.
             remaining_kb = max(0.0, remaining_kb - bandwidth * current_tick)
             payload_time += current_tick
 
@@ -250,6 +254,7 @@ class BitTorrentSimulator:
         scheduled = 0
         # Moi lan peer thuc day, no co gang lap day tat ca download slot dang ranh.
         # Vong lap nay khong polling theo thoi gian; no chi chay khi process duoc wake.
+        # Lấp đầy toàn bộ download slot của peer trong một lần thức dậy.
         while (
             not self.completed
             and not peer.is_complete(self.config.total_chunks)
@@ -268,6 +273,7 @@ class BitTorrentSimulator:
             scheduled += 1
         return scheduled
 
+    # tiến trình sống lâu dài của mỗi peer
     def _peer_process(self, peer: Peer) -> Generator[Any, Any, None]:
         while not self.completed:
             if not peer.is_complete(self.config.total_chunks):

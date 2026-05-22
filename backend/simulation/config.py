@@ -18,10 +18,10 @@ class SimulationConfig:
     file_size_mb: int = 10
     chunk_size_kb: int = 256
     peer_count: int = 10
-    seed: int = 9
-    initial_chunk_probability: float = 0.15
-    bandwidth_kbps: float = 512.0
-    upload_bandwidth_kbps: float | None = None
+    seed: int = 1
+    initial_chunk_probability: float = 0.3
+    bandwidth_kbps: float = 128.0
+    upload_bandwidth_kbps: float | None = 128.0
     latency_ms: float = 50.0
     max_download_slots: int = 2
     max_upload_slots: int = 3
@@ -43,7 +43,7 @@ class SimulationConfig:
 
     @property
     def effective_upload_bandwidth_kbps(self) -> float:
-        return self.upload_bandwidth_kbps or self.bandwidth_kbps
+        return self.bandwidth_kbps if self.upload_bandwidth_kbps is None else self.upload_bandwidth_kbps
 
     def validate(self) -> None:
         if self.file_size_mb <= 0:
@@ -77,6 +77,10 @@ class SimulationConfig:
             {
                 "fileSizeKb": self.file_size_kb,
                 "totalChunks": self.total_chunks,
+                "downloadBandwidthKbps": self.bandwidth_kbps,
+                "uploadBandwidthKbps": self.effective_upload_bandwidth_kbps,
+                "download_bandwidth": self.bandwidth_kbps,
+                "upload_bandwidth": self.effective_upload_bandwidth_kbps,
                 "effectiveUploadBandwidthKbps": self.effective_upload_bandwidth_kbps,
                 "bandwidthUnit": "KB/s",
                 "timeUnit": "seconds",
@@ -108,16 +112,34 @@ class SimulationConfig:
                 )
             ),
             bandwidth_kbps=float(
-                pick("bandwidth", "bandwidthKbps", "bandwidth_kbps", default=defaults.bandwidth_kbps)
+                pick(
+                    "downloadBandwidth",
+                    "downloadBandwidthKbps",
+                    "download_bandwidth",
+                    "download_bandwidth_kbps",
+                    "dowloadBandwidth",
+                    "dowload_bandwidth",
+                    "bandwidth",
+                    "bandwidthKbps",
+                    "bandwidth_kbps",
+                    default=defaults.bandwidth_kbps,
+                )
             ),
             upload_bandwidth_kbps=(
                 None
-                if pick("uploadBandwidth", "uploadBandwidthKbps", "upload_bandwidth_kbps", default=None)
+                if pick(
+                    "uploadBandwidth",
+                    "uploadBandwidthKbps",
+                    "upload_bandwidth",
+                    "upload_bandwidth_kbps",
+                    default=None,
+                )
                 is None
                 else float(
                     pick(
                         "uploadBandwidth",
                         "uploadBandwidthKbps",
+                        "upload_bandwidth",
                         "upload_bandwidth_kbps",
                         default=defaults.effective_upload_bandwidth_kbps,
                     )

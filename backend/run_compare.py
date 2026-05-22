@@ -8,10 +8,11 @@ from simulation.service import compare_strategies
 if __name__ == "__main__":
     result = compare_strategies(
         {
-            "seed": 9,
-            "bandwidthKbps": 512,
+            "seed": 1,
+            "download_bandwidth": 128,
+            "upload_bandwidth": 128,
             "latencyMs": 50,
-            "initialChunkProbability": 0.15,
+            "initialChunkProbability": 0.3,
         }
     )
     summary = {

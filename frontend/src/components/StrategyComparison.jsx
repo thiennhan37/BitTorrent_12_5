@@ -6,7 +6,7 @@ export default function StrategyComparison({ result, selectedView, setSelectedVi
       <div className="section-header">
         <div>
           <h2>Random-First vs Rarest-First</h2>
-          <p className="muted">Both strategies use the same seed, initial state, bandwidth and latency.</p>
+          <p className="muted">Both strategies use the same seed, initial state, bandwidth, slots and latency.</p>
         </div>
         <span className="winner">Winner: {result.winner}</span>
       </div>

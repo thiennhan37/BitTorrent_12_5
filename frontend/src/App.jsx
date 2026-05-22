@@ -11,10 +11,13 @@ import TimelineReplay from './components/TimelineReplay.jsx';
 export default function App() {
   const [config, setConfig] = useState(null);
   const [form, setForm] = useState({
-    seed: 9,
-    bandwidthKbps: 512,
+    seed: 1,
+    download_bandwidth: 128,
+    upload_bandwidth: 128,
     latencyMs: 50,
-    initialChunkProbability: 0.15,
+    initialChunkProbability: 0.3,
+    max_download_slots: 2,
+    max_upload_slots: 3,
   });
   const [strategy, setStrategy] = useState('rarestFirst');
   const [compareResult, setCompareResult] = useState(null);
@@ -30,10 +33,18 @@ export default function App() {
         setForm((prev) => ({
           ...prev,
           seed: data.seed,
-          bandwidthKbps: data.bandwidth_kbps ?? data.bandwidthKbps ?? 512,
+          download_bandwidth:
+            data.download_bandwidth ?? data.downloadBandwidthKbps ?? data.bandwidth_kbps ?? data.bandwidthKbps ?? 128,
+          upload_bandwidth:
+            data.upload_bandwidth ??
+            data.uploadBandwidthKbps ??
+            data.upload_bandwidth_kbps ??
+            data.effectiveUploadBandwidthKbps ??
+            128,
           latencyMs: data.latency_ms ?? data.latencyMs ?? 50,
-          // initialChunkProbability: data.initial_chunk_probability ?? 0.28,
-          initialChunkProbability: data.initial_chunk_probability ?? data.initialChunkProbability ?? 0.15,
+          initialChunkProbability: data.initial_chunk_probability ?? data.initialChunkProbability ?? 0.3,
+          max_download_slots: data.max_download_slots ?? data.maxDownloadSlots ?? 2,
+          max_upload_slots: data.max_upload_slots ?? data.maxUploadSlots ?? 3,
         }));
       })
       .catch((err) => setError(err.message));

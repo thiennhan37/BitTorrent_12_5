@@ -10,7 +10,7 @@ from simulation.config import SimulationConfig
 from simulation.initial_state import generate_initial_state
 from simulation.service import compare_strategies
 from simulation.simulator import BitTorrentSimulator
-from simulation.strategies import RarestFirstStrategy
+from simulation.strategies import RandomFirstStrategy, RarestFirstStrategy
 import random
 
 
@@ -22,6 +22,10 @@ def test_default_config_has_40_chunks():
     assert config.chunk_size_kb == 256
     assert config.total_chunks == 40
     assert config.peer_count == 10
+    assert config.seed == 1
+    assert config.bandwidth_kbps == 128
+    assert config.effective_upload_bandwidth_kbps == 128
+    assert config.initial_chunk_probability == 0.3
 
 
 def test_initial_state_is_complete_swarm_but_not_complete_peers():
@@ -65,6 +69,76 @@ def test_rarest_strategy_picks_chunk_with_fewest_copies():
     strategy = RarestFirstStrategy(random.Random(5))
     selected = strategy.select_chunk(downloader, peers, total_chunks=3)
     assert selected == 1
+
+
+def test_rarest_strategy_spreads_in_flight_rare_chunks():
+    from simulation.models import Peer
+
+    peers = [
+        Peer(id=0, owned_chunks={0, 1}, max_upload_slots=3, active_uploads={1: 0}),
+        Peer(id=1, owned_chunks=set(), active_downloads={0: 0}),
+        Peer(id=2, owned_chunks=set()),
+    ]
+    strategy = RarestFirstStrategy(random.Random(5))
+
+    selected = strategy.select_chunk(peers[2], peers, total_chunks=2)
+
+    assert selected == 1
+
+
+def test_source_selection_policy_is_shared_between_strategies():
+    from simulation.models import Peer
+
+    class FakeConfig:
+        chunk_size_kb = 256
+
+    class FakeNetwork:
+        config = FakeConfig()
+
+        def effective_bandwidth(self, source, destination):
+            return 1024 if source.id == 1 else 256
+
+        def effective_latency_ms(self, source, destination):
+            return 0
+
+    peers = [
+        Peer(id=0, owned_chunks=set()),
+        Peer(id=1, owned_chunks={0}),
+        Peer(id=2, owned_chunks={0}),
+    ]
+    random_strategy = RandomFirstStrategy(random.Random(5), FakeNetwork())
+    rarest_strategy = RarestFirstStrategy(random.Random(5), FakeNetwork())
+
+    assert random_strategy.select_source(peers[0], peers, 0).id == 1
+    assert rarest_strategy.select_source(peers[0], peers, 0).id == 1
+
+
+def test_default_upload_bandwidth_is_resolved_before_network_math():
+    from simulation.models import Peer
+    from simulation.network import NetworkModel
+
+    config = SimulationConfig(bandwidth_kbps=512, upload_bandwidth_kbps=None)
+    result = BitTorrentSimulator(config=config, strategy="randomFirst").run()
+    bandwidth = NetworkModel(config).shared_upload_bandwidth(Peer(id=0))
+
+    assert bandwidth == 512
+    assert result["completed"] is True
+
+
+def test_payload_accepts_split_bandwidth_and_slots_from_frontend():
+    config = SimulationConfig.from_payload(
+        {
+            "download_bandwidth": 256,
+            "upload_bandwidth": 64,
+            "max_download_slots": 4,
+            "max_upload_slots": 5,
+        }
+    )
+
+    assert config.bandwidth_kbps == 256
+    assert config.effective_upload_bandwidth_kbps == 64
+    assert config.max_download_slots == 4
+    assert config.max_upload_slots == 5
 
 # new github 
 def test_compare_respects_initial_probability_payload():
