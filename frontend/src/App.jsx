@@ -25,6 +25,7 @@ export default function App() {
   const [selectedView, setSelectedView] = useState('rarestFirst');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [timelineIndex, setTimelineIndex] = useState(0);
 
   useEffect(() => {
     getConfig()
@@ -55,10 +56,18 @@ export default function App() {
     return singleResult;
   }, [compareResult, selectedView, singleResult]);
 
+  const activeSnapshotTime = useMemo(() => {
+    const timeline = activeResult?.progressTimeline || [];
+    if (!timeline.length) return null;
+    const safeIndex = Math.min(timelineIndex, timeline.length - 1);
+    return timeline[safeIndex]?.time ?? null;
+  }, [activeResult, timelineIndex]);
+
   async function handleCompare() {
     setLoading(true);
     setError('');
     setSingleResult(null);
+    setTimelineIndex(0);
     try {
       const result = await compareStrategies(form);
       setCompareResult(result);
@@ -74,6 +83,7 @@ export default function App() {
     setLoading(true);
     setError('');
     setCompareResult(null);
+    setTimelineIndex(0);
     try {
       const result = await simulate({ ...form, strategy });
       setSingleResult(result);
@@ -123,9 +133,18 @@ export default function App() {
           <MetricsPanel result={activeResult} compareResult={compareResult} />
           <section className="grid-two">
             <PeerProgressTable peers={activeResult.finalPeers} totalChunks={activeResult.config.totalChunks} />
-            <PeerNetworkGraph logs={activeResult.logs} peerCount={activeResult.config.peer_count || activeResult.config.peerCount || 10} />
+            <PeerNetworkGraph
+              logs={activeResult.logs}
+              peerCount={activeResult.config.peer_count || activeResult.config.peerCount || 10}
+              maxTime={activeSnapshotTime}
+            />
           </section>
-          <TimelineReplay timeline={activeResult.progressTimeline} totalChunks={activeResult.config.totalChunks} />
+          <TimelineReplay
+            timeline={activeResult.progressTimeline}
+            totalChunks={activeResult.config.totalChunks}
+            index={timelineIndex}
+            onIndexChange={setTimelineIndex}
+          />
           <TransferLog logs={activeResult.logs} />
         </>
       )}

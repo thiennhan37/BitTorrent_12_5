@@ -1,10 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ChunkGrid from './ChunkGrid.jsx';
 
-export default function TimelineReplay({ timeline = [], totalChunks = 40 }) {
-  const [index, setIndex] = useState(0);
-  const safeIndex = Math.min(index, Math.max(timeline.length - 1, 0));
+export default function TimelineReplay({ timeline = [], totalChunks = 40, index, onIndexChange }) {
+  const [internalIndex, setInternalIndex] = useState(0);
+  const controlled = Number.isFinite(index);
+  const activeIndex = controlled ? index : internalIndex;
+  const safeIndex = Math.min(activeIndex, Math.max(timeline.length - 1, 0));
   const snapshot = timeline[safeIndex];
+
+  useEffect(() => {
+    if (!controlled) {
+      setInternalIndex((prev) => Math.min(prev, Math.max(timeline.length - 1, 0)));
+    }
+  }, [timeline.length, controlled]);
 
   const summary = useMemo(() => {
     if (!snapshot) return null;
@@ -28,7 +36,14 @@ export default function TimelineReplay({ timeline = [], totalChunks = 40 }) {
         min="0"
         max={Math.max(timeline.length - 1, 0)}
         value={safeIndex}
-        onChange={(event) => setIndex(Number(event.target.value))}
+        onChange={(event) => {
+          const nextIndex = Number(event.target.value);
+          if (controlled) {
+            onIndexChange?.(nextIndex);
+          } else {
+            setInternalIndex(nextIndex);
+          }
+        }}
       />
       <p className="muted">{summary}</p>
       <div className="timeline-peers">
