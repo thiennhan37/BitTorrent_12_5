@@ -94,16 +94,22 @@ def recommend_churn_candidate(payload: Mapping[str, Any] | None = None) -> dict[
     initial_state = clone_initial_state(payload.get("initialState") or generate_initial_state(config))
     churn_time = max(float(payload.get("time", payload.get("churnTime", 0.0))), 0.0)
 
-    baseline = compare_strategies({**payload, "initialState": initial_state, "churnEvents": []})
+    existing_events = payload.get("churnEvents") or payload.get("churn_events") or []
+    baseline = compare_strategies({**payload, "initialState": initial_state, "churnEvents": existing_events})
     random_snapshot = _snapshot_at_or_before(baseline["randomFirst"]["progressTimeline"], churn_time)
     rarest_snapshot = _snapshot_at_or_before(baseline["rarestFirst"]["progressTimeline"], churn_time)
     random_availability = _availability_from_snapshot(random_snapshot, config.total_chunks)
     rarest_availability = _availability_from_snapshot(rarest_snapshot, config.total_chunks)
+    random_online_at_time = {int(peer["peerId"]) for peer in (random_snapshot or {}).get("peers", []) if peer.get("online", True)}
+    rarest_online_at_time = {int(peer["peerId"]) for peer in (rarest_snapshot or {}).get("peers", []) if peer.get("online", True)}
 
     trials: list[dict[str, Any]] = []
     for peer_id in range(config.peer_count):
+        # Peer da offline o timeline hien tai thi khong phai candidate "drop" hop le.
+        if peer_id not in random_online_at_time and peer_id not in rarest_online_at_time:
+            continue
         event = {"time": churn_time, "peerId": peer_id, "online": False}
-        result = compare_strategies({**payload, "initialState": initial_state, "churnEvents": [event]})
+        result = compare_strategies({**payload, "initialState": initial_state, "churnEvents": [*existing_events, event]})
         random_result = result["randomFirst"]
         rarest_result = result["rarestFirst"]
         rare_chunks = [

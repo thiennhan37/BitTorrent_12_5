@@ -133,6 +133,7 @@ export default function App() {
         ...form,
         initialState: baseline.initialState,
         time: activeSnapshotTime,
+        churnEvents: activeChurnEvents,
       });
       setChurnRecommendation(result.recommendation);
     } catch (err) {
@@ -264,5 +265,4 @@ export default function App() {
     </main>
   );
 }
-
 
