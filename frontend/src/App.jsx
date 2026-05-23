@@ -22,6 +22,11 @@ export default function App() {
   const [strategy, setStrategy] = useState('rarestFirst');
   const [compareResult, setCompareResult] = useState(null);
   const [singleResult, setSingleResult] = useState(null);
+<<<<<<< HEAD
+=======
+  const [churnRecommendation, setChurnRecommendation] = useState(null);
+  const [churnScenario, setChurnScenario] = useState(null);
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
   const [selectedView, setSelectedView] = useState('rarestFirst');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -63,6 +68,16 @@ export default function App() {
     return timeline[safeIndex]?.time ?? null;
   }, [activeResult, timelineIndex]);
 
+<<<<<<< HEAD
+=======
+  const activeSnapshot = useMemo(() => {
+    const timeline = activeResult?.progressTimeline || [];
+    if (!timeline.length) return null;
+    const safeIndex = Math.min(timelineIndex, timeline.length - 1);
+    return timeline[safeIndex] || null;
+  }, [activeResult, timelineIndex]);
+
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
   async function handleCompare() {
     setLoading(true);
     setError('');
@@ -71,12 +86,19 @@ export default function App() {
     try {
       const result = await compareStrategies(form);
       setCompareResult(result);
+<<<<<<< HEAD
+=======
+      setBaselineCompareResult(result);
+      setChurnRecommendation(null);
+      setChurnScenario(null);
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
       setSelectedView(result.winner === 'randomFirst' ? 'randomFirst' : 'rarestFirst');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+<<<<<<< HEAD
   }
 
   async function handleSimulate() {
@@ -93,6 +115,79 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+=======
+  }
+
+  async function handleSimulate() {
+    setLoading(true);
+    setError('');
+    setCompareResult(null);
+    setBaselineCompareResult(null);
+    setChurnRecommendation(null);
+    setChurnScenario(null);
+    setTimelineIndex(0);
+    try {
+      const result = await simulate({ ...form, strategy });
+      setSingleResult(result);
+      setSelectedView(strategy);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRecommendChurn() {
+    const baseline = baselineCompareResult || compareResult;
+    if (!baseline || activeSnapshotTime == null) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      const result = await recommendChurn({
+        ...form,
+        initialState: baseline.initialState,
+        time: activeSnapshotTime,
+      });
+      setChurnRecommendation(result.recommendation);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleApplyChurn(peerId, time = activeSnapshotTime) {
+    const baseline = baselineCompareResult || compareResult;
+    if (!baseline || time == null || peerId == null) return;
+
+    const event = { time, peerId, online: false };
+    setLoading(true);
+    setError('');
+    try {
+      const result = await compareStrategies({
+        ...form,
+        initialState: baseline.initialState,
+        churnEvents: [event],
+      });
+      setCompareResult(result);
+      setChurnScenario(event);
+      setSelectedView(result.winner === 'rarestFirst' ? 'rarestFirst' : 'randomFirst');
+      setTimelineIndex(0);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleResetChurn() {
+    if (!baselineCompareResult) return;
+    setCompareResult(baselineCompareResult);
+    setChurnRecommendation(null);
+    setChurnScenario(null);
+    setTimelineIndex(0);
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
   }
 
   return (
@@ -128,6 +223,21 @@ export default function App() {
         />
       )}
 
+<<<<<<< HEAD
+=======
+      {compareResult && (
+        <ChurnPanel
+          snapshotTime={activeSnapshotTime}
+          recommendation={churnRecommendation}
+          churnScenario={churnScenario}
+          loading={loading}
+          onRecommend={handleRecommendChurn}
+          onApply={handleApplyChurn}
+          onReset={handleResetChurn}
+        />
+      )}
+
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
       {activeResult && (
         <>
           <MetricsPanel result={activeResult} compareResult={compareResult} />
@@ -137,6 +247,12 @@ export default function App() {
               logs={activeResult.logs}
               peerCount={activeResult.config.peer_count || activeResult.config.peerCount || 10}
               maxTime={activeSnapshotTime}
+<<<<<<< HEAD
+=======
+              peers={activeSnapshot?.peers || activeResult.finalPeers}
+              recommendedPeerId={churnRecommendation?.peerId}
+              onPeerClick={compareResult ? handleApplyChurn : null}
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
             />
           </section>
           <TimelineReplay

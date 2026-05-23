@@ -145,6 +145,42 @@ th { color: #475569; font-size: 0.82rem; text-transform: uppercase; letter-spaci
 .timeline-peer { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; }
 .timeline-peer > span { float: right; color: #64748b; }
 
+<<<<<<< HEAD
+=======
+.churn-panel { display: grid; gap: 14px; }
+.churn-badge {
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+}
+.churn-recommendation {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 14px;
+  background: #f8fafc;
+}
+.churn-recommendation.strong {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.churn-facts {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: #475569;
+}
+.churn-facts span {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 700;
+}
+
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
 
 .form-group-section h3 {
   margin-top: 8px;     /* Khoảng cách phía trên tiêu đề nhóm */

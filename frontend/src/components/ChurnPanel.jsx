@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 
+=======
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
 export default function ChurnPanel({
   snapshotTime,
   recommendation,
@@ -10,9 +13,12 @@ export default function ChurnPanel({
 }) {
   const recommendedPeer = recommendation?.peerId;
   const rareChunks = recommendation?.rareChunks || [];
+<<<<<<< HEAD
 
   const hasAnyChurnEvent = (churnEvents || []).length > 0;
   const hasActiveChurnState = Array.from(effectivePeerStates?.entries?.() || []).length > 0;
+=======
+>>>>>>> parent of dc85ae4 (Fix churn event timing across timeline snapshots)
 
   return (
     <section className="card churn-panel">
