@@ -76,7 +76,7 @@ class RarestFirstStrategy(ChunkSelectionStrategy):
     display_name = "Rarest-First"
 
     def _active_download_count(self, peers: list[Peer], chunk_id: int) -> int:
-        return sum(1 for peer in peers if peer.online and chunk_id in peer.active_downloads)
+        return sum(1 for peer in peers if chunk_id in peer.active_downloads)
 
     def select_chunk(self, downloader: Peer, peers: list[Peer], total_chunks: int) -> int | None:
         if not downloader.has_free_download_slot():
@@ -90,7 +90,7 @@ class RarestFirstStrategy(ChunkSelectionStrategy):
             sources = self.eligible_sources(downloader, peers, chunk_id)
             if not downloader.can_start_download(chunk_id) or not sources:
                 continue
-            copies = sum(1 for peer in peers if peer.online and peer.id != downloader.id and peer.has_chunk(chunk_id))
+            copies = sum(1 for peer in peers if peer.id != downloader.id and peer.has_chunk(chunk_id))
             if copies <= 0:
                 continue
 

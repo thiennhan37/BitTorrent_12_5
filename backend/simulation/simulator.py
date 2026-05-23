@@ -25,7 +25,6 @@ class BitTorrentSimulator:
         config: SimulationConfig | None = None,
         strategy: str = "randomFirst",
         initial_state: list[list[int]] | list[set[int]] | None = None,
-        churn_events: list[dict[str, Any]] | None = None,
     ) -> None:
         self.config = config or SimulationConfig()
         self.config.validate()
@@ -35,7 +34,6 @@ class BitTorrentSimulator:
         self.env = Environment()
         self.network = NetworkModel(self.config)
         self.strategy = build_strategy(strategy, self.rng, self.network)
-        self.churn_events = self._normalize_churn_events(churn_events or [])
         # Global event dung de danh thuc tat ca peer khi swarm co thay doi quan trong:
         # chunk moi xuat hien hoac slot/bandwidth duoc giai phong sau khi transfer ket thuc.
         self.swarm_event = self.env.event()
@@ -43,8 +41,6 @@ class BitTorrentSimulator:
         self.peers = self._build_peers(self.initial_state)
         self.logs: list[dict[str, Any]] = []
         self.transfer_records: list[TransferRecord] = []
-        self.active_transfers: dict[int, tuple[Peer, Peer, int, float, float]] = {}
-        self.cancelled_transfers: set[int] = set()
         self.progress_timeline: list[dict[str, Any]] = []
         self.transfer_counter = 0
         self.completed = False
@@ -57,7 +53,6 @@ class BitTorrentSimulator:
             peers.append(
                 Peer(
                     id=peer_id,
-                    online=True,
                     owned_chunks=chunks,
                     download_bandwidth_kbps=self.config.bandwidth_kbps,
                     upload_bandwidth_kbps=self.config.effective_upload_bandwidth_kbps,
@@ -68,36 +63,12 @@ class BitTorrentSimulator:
             )
         return peers
 
-    def _normalize_churn_events(self, churn_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        normalized: list[dict[str, Any]] = []
-        for event in churn_events:
-            peer_id = int(event.get("peerId", event.get("peer_id", -1)))
-            if peer_id < 0 or peer_id >= self.config.peer_count:
-                raise ValueError(f"churn peerId must be between 0 and {self.config.peer_count - 1}")
-
-            raw_online = event.get("online")
-            if raw_online is None:
-                action = str(event.get("action", "offline")).lower()
-                online = action in {"online", "on", "join", "up", "true"}
-            else:
-                online = bool(raw_online)
-
-            normalized.append(
-                {
-                    "time": max(float(event.get("time", 0.0)), 0.0),
-                    "peerId": peer_id,
-                    "online": online,
-                }
-            )
-        return sorted(normalized, key=lambda item: (item["time"], item["peerId"], item["online"]))
-
     def all_complete(self) -> bool:
-        online_peers = [peer for peer in self.peers if peer.online]
-        return bool(online_peers) and all(peer.is_complete(self.config.total_chunks) for peer in online_peers)
+        return all(peer.is_complete(self.config.total_chunks) for peer in self.peers)
 
     def chunk_availability(self) -> dict[int, int]:
         return {
-            chunk_id: sum(1 for peer in self.peers if peer.online and peer.has_chunk(chunk_id))
+            chunk_id: sum(1 for peer in self.peers if peer.has_chunk(chunk_id))
             for chunk_id in range(self.config.total_chunks)
         }
 
@@ -108,8 +79,7 @@ class BitTorrentSimulator:
         return {
             "time": round(float(self.env.now), 6),
             "averageCompletion": average,
-            "completedPeers": sum(1 for peer in self.peers if peer.online and peer.is_complete(self.config.total_chunks)),
-            "onlinePeers": sum(1 for peer in self.peers if peer.online),
+            "completedPeers": sum(1 for peer in self.peers if peer.is_complete(self.config.total_chunks)),
             "peers": peer_snapshots, 
         }
   
@@ -162,84 +132,6 @@ class BitTorrentSimulator:
             }
         )
 
-    def _log_churn_event(self, peer: Peer, online: bool) -> None:
-        current_time = float(self.env.now)
-        self.logs.append(
-            {
-                "transferId": None,
-                "event": "CHURN",
-                "time": round(current_time, 6),
-                "timestamp": round(current_time, 6),
-                "sourcePeer": None,
-                "destinationPeer": peer.id,
-                "chunkId": None,
-                "startTime": round(current_time, 6),
-                "endTime": round(current_time, 6),
-                "duration": 0.0,
-                "bandwidthKbps": 0.0,
-                "latencyMs": 0.0,
-                "peerId": peer.id,
-                "online": online,
-                "action": "ONLINE" if online else "OFFLINE",
-            }
-        )
-
-    def _cancel_transfer(self, transfer_id: int, reason: str) -> None:
-        transfer = self.active_transfers.pop(transfer_id, None)
-        if transfer is None:
-            return
-
-        source, destination, chunk_id, start_time, latency_ms = transfer
-        self.cancelled_transfers.add(transfer_id)
-        if chunk_id in destination.active_downloads and destination.id in source.active_uploads:
-            destination.finish_transfer_from(source, chunk_id, success=False)
-
-        self._log_event(
-            event="CANCEL",
-            transfer_id=transfer_id,
-            source=source,
-            destination=destination,
-            chunk_id=chunk_id,
-            start_time=start_time,
-            duration=float(self.env.now) - start_time,
-            bandwidth=0.0,
-            latency_ms=latency_ms,
-        )
-        self.logs[-1]["reason"] = reason
-
-    def _cancel_peer_transfers(self, peer: Peer) -> None:
-        transfer_ids = [
-            transfer_id
-            for transfer_id, (source, destination, _, _, _) in self.active_transfers.items()
-            if source.id == peer.id or destination.id == peer.id
-        ]
-        for transfer_id in transfer_ids:
-            self._cancel_transfer(transfer_id, "peer_offline")
-
-    def _apply_churn_event(self, event: dict[str, Any]) -> None:
-        peer = self.peers[event["peerId"]]
-        online = event["online"]
-        if peer.online != online:
-            peer.online = online
-            if not online:
-                self._cancel_peer_transfers(peer)
-
-        self._log_churn_event(peer, online)
-        self._record_progress()
-        if self.all_complete() and not self.completed:
-            self.completed = True
-            self.total_completion_time = float(self.env.now)
-        self._wake_swarm()
-
-    def _churn_process(self) -> Generator[Any, Any, None]:
-        for event in self.churn_events:
-            delay = event["time"] - float(self.env.now)
-            if delay > 0:
-                yield self.env.timeout(delay)
-            if self.completed:
-                break
-            self._apply_churn_event(event)
-
     def _start_transfer(self, destination: Peer, source: Peer, chunk_id: int) -> bool:
         """Reserve slots and spawn a tick-based transfer process."""
 
@@ -257,7 +149,6 @@ class BitTorrentSimulator:
         estimated_duration = latency_ms / 1000.0 + self.config.chunk_size_kb / bandwidth
         transfer_id = self.transfer_counter
         self.transfer_counter += 1
-        self.active_transfers[transfer_id] = (source, destination, chunk_id, start_time, latency_ms)
 
         self._log_event(
             event="START",
@@ -297,17 +188,12 @@ class BitTorrentSimulator:
         if latency_seconds > 0:
             # Latency cố định trước khi payload bắt đầu đi qua link.
             yield self.env.timeout(latency_seconds)
-            if transfer_id in self.cancelled_transfers or not source.online or not destination.online:
-                return
 
         remaining_kb = float(self.config.chunk_size_kb)
         payload_time = 0.0
         tick_duration = self.config.transfer_tick_duration
 
         while remaining_kb > 1e-9:
-            if transfer_id in self.cancelled_transfers or not source.online or not destination.online:
-                self._cancel_transfer(transfer_id, "peer_offline")
-                return
             # Mỗi tick đọc lại active_upload_count/active_download_count nên các transfer
             # mới hoặc vừa kết thúc sẽ làm bandwidth giảm/tăng ngay ở tick kế tiếp.
             bandwidth = self.network.effective_bandwidth(source, destination)
@@ -320,8 +206,6 @@ class BitTorrentSimulator:
             current_tick = min(tick_duration, remaining_kb / bandwidth)
             # pause process này, các process khác vẫn chạy bình thường.
             yield self.env.timeout(current_tick)
-            if transfer_id in self.cancelled_transfers or not source.online or not destination.online:
-                return
             # Sau khi simulation time tiến lên current_tick, trừ dung lượng payload vừa truyền.
             remaining_kb = max(0.0, remaining_kb - bandwidth * current_tick)
             payload_time += current_tick
@@ -329,7 +213,6 @@ class BitTorrentSimulator:
         # Hoan tat transfer: add chunk, release slot, ghi log, roi wake swarm de scheduler
         # tim them co hoi transfer moi voi chunk/slot vua duoc giai phong.
         destination.finish_transfer_from(source, chunk_id, success=True)
-        self.active_transfers.pop(transfer_id, None)
         end_time = float(self.env.now)
         duration = end_time - start_time
         average_bandwidth = (
@@ -374,7 +257,6 @@ class BitTorrentSimulator:
         # Lấp đầy toàn bộ download slot của peer trong một lần thức dậy.
         while (
             not self.completed
-            and peer.online
             and not peer.is_complete(self.config.total_chunks)
             and peer.has_free_download_slot()
         ):
@@ -394,7 +276,7 @@ class BitTorrentSimulator:
     # tiến trình sống lâu dài của mỗi peer
     def _peer_process(self, peer: Peer) -> Generator[Any, Any, None]:
         while not self.completed:
-            if peer.online and not peer.is_complete(self.config.total_chunks):
+            if not peer.is_complete(self.config.total_chunks):
                 self._schedule_peer_downloads(peer)
 
             if self.completed:
@@ -410,8 +292,6 @@ class BitTorrentSimulator:
             self.total_completion_time = 0.0
             return self.to_result()
 
-        if self.churn_events:
-            self.env.process(self._churn_process())
         for peer in self.peers:
             self.env.process(self._peer_process(peer))
 
@@ -443,5 +323,4 @@ class BitTorrentSimulator:
             "finalPeers": final_peers,
             "chunkAvailability": self.chunk_availability(),
             "config": self.config.to_dict(),
-            "churnEvents": self.churn_events,
         }

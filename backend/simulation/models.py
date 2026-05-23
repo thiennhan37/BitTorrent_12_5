@@ -8,7 +8,6 @@ from typing import Any
 class Peer:
     id: int
     owned_chunks: set[int] = field(default_factory=set)
-    online: bool = True
     download_bandwidth_kbps: float = 512.0
     upload_bandwidth_kbps: float = 512.0
     latency_ms: float = 50.0
@@ -55,17 +54,14 @@ class Peer:
 
     def can_start_download(self, chunk_id: int) -> bool:
         return (
-            self.online
-            and self.has_free_download_slot()
+            self.has_free_download_slot()
             and not self.has_chunk(chunk_id)
             and chunk_id not in self.active_downloads
         )
 
     def can_upload_to(self, downloader: "Peer", chunk_id: int) -> bool:
         return (
-            self.online
-            and downloader.online
-            and self.id != downloader.id
+            self.id != downloader.id
             and self.has_chunk(chunk_id)
             and self.has_free_upload_slot()
             and downloader.id not in self.active_uploads
@@ -100,7 +96,6 @@ class Peer:
     def to_dict(self, total_chunks: int) -> dict[str, Any]:
         return {
             "peerId": self.id,
-            "online": self.online,
             "ownedChunks": sorted(self.owned_chunks),
             "ownedChunkCount": len(self.owned_chunks),
             "missingChunkCount": max(total_chunks - len(self.owned_chunks), 0),

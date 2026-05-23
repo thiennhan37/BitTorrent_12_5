@@ -12,12 +12,7 @@ def run_single_simulation(payload: Mapping[str, Any] | None = None) -> dict[str,
     strategy = payload.get("strategy", "randomFirst")
     config = SimulationConfig.from_payload(payload)
     initial_state = payload.get("initialState") or generate_initial_state(config)
-    simulator = BitTorrentSimulator(
-        config=config,
-        strategy=strategy,
-        initial_state=initial_state,
-        churn_events=payload.get("churnEvents") or payload.get("churn_events") or [],
-    )
+    simulator = BitTorrentSimulator(config=config, strategy=strategy, initial_state=initial_state)
     return simulator.run()
 
 
@@ -25,19 +20,16 @@ def compare_strategies(payload: Mapping[str, Any] | None = None) -> dict[str, An
     payload = dict(payload or {})
     config = SimulationConfig.from_payload(payload)
     initial_state = clone_initial_state(payload.get("initialState") or generate_initial_state(config))
-    churn_events = payload.get("churnEvents") or payload.get("churn_events") or []
 
     random_first = BitTorrentSimulator(
         config=config,
         strategy="randomFirst",
         initial_state=clone_initial_state(initial_state),
-        churn_events=churn_events,
     ).run()
     rarest_first = BitTorrentSimulator(
         config=config,
         strategy="rarestFirst",
         initial_state=clone_initial_state(initial_state),
-        churn_events=churn_events,
     ).run()
 
     if not random_first["completed"] and not rarest_first["completed"]:
@@ -59,103 +51,6 @@ def compare_strategies(payload: Mapping[str, Any] | None = None) -> dict[str, An
         "rarestFirst": rarest_first,
         "winner": winner,
         "difference": difference,
-        "initialState": initial_state,
-        "churnEvents": churn_events,
-        "config": config.to_dict(),
-    }
-
-
-def _snapshot_at_or_before(timeline: list[dict[str, Any]], time_value: float) -> dict[str, Any] | None:
-    snapshot = None
-    for item in timeline:
-        if float(item.get("time", 0.0)) <= time_value:
-            snapshot = item
-        else:
-            break
-    return snapshot or (timeline[0] if timeline else None)
-
-
-def _availability_from_snapshot(snapshot: dict[str, Any] | None, total_chunks: int) -> dict[int, list[int]]:
-    availability: dict[int, list[int]] = {chunk_id: [] for chunk_id in range(total_chunks)}
-    if not snapshot:
-        return availability
-
-    for peer in snapshot.get("peers", []):
-        if not peer.get("online", True):
-            continue
-        for chunk_id in peer.get("ownedChunks", []):
-            availability[int(chunk_id)].append(int(peer["peerId"]))
-    return availability
-
-
-def recommend_churn_candidate(payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    payload = dict(payload or {})
-    config = SimulationConfig.from_payload(payload)
-    initial_state = clone_initial_state(payload.get("initialState") or generate_initial_state(config))
-    churn_time = max(float(payload.get("time", payload.get("churnTime", 0.0))), 0.0)
-
-    baseline = compare_strategies({**payload, "initialState": initial_state, "churnEvents": []})
-    random_snapshot = _snapshot_at_or_before(baseline["randomFirst"]["progressTimeline"], churn_time)
-    rarest_snapshot = _snapshot_at_or_before(baseline["rarestFirst"]["progressTimeline"], churn_time)
-    random_availability = _availability_from_snapshot(random_snapshot, config.total_chunks)
-    rarest_availability = _availability_from_snapshot(rarest_snapshot, config.total_chunks)
-
-    trials: list[dict[str, Any]] = []
-    for peer_id in range(config.peer_count):
-        event = {"time": churn_time, "peerId": peer_id, "online": False}
-        result = compare_strategies({**payload, "initialState": initial_state, "churnEvents": [event]})
-        random_result = result["randomFirst"]
-        rarest_result = result["rarestFirst"]
-        rare_chunks = [
-            chunk_id
-            for chunk_id, owners in random_availability.items()
-            if owners == [peer_id] and len(rarest_availability.get(chunk_id, [])) > 1
-        ]
-        random_missing = [
-            chunk_id
-            for chunk_id, count in random_result.get("chunkAvailability", {}).items()
-            if int(count) == 0
-        ]
-        desired = not random_result["completed"] and rarest_result["completed"]
-        trials.append(
-            {
-                "peerId": peer_id,
-                "event": event,
-                "desired": desired,
-                "rareChunks": rare_chunks,
-                "randomCompleted": random_result["completed"],
-                "rarestCompleted": rarest_result["completed"],
-                "randomTotalTime": random_result["totalTime"],
-                "rarestTotalTime": rarest_result["totalTime"],
-                "randomMissingChunks": [int(chunk_id) for chunk_id in random_missing],
-                "score": (
-                    1000 if desired else 0,
-                    len(rare_chunks),
-                    1 if rarest_result["completed"] else 0,
-                    -random_result["totalTransfers"],
-                ),
-            }
-        )
-
-    recommendation = max(trials, key=lambda item: item["score"], default=None)
-    if recommendation:
-        recommendation = {key: value for key, value in recommendation.items() if key != "score"}
-        if recommendation["desired"]:
-            recommendation["message"] = (
-                f"Turn off Peer {recommendation['peerId']} at t={round(churn_time, 3)}s: "
-                "Random-First cannot finish, while Rarest-First still completes."
-            )
-        else:
-            recommendation["message"] = (
-                f"Peer {recommendation['peerId']} is the strongest churn candidate at t={round(churn_time, 3)}s, "
-                "but this seed/time does not produce the full Random-fails/Rarest-completes contrast."
-            )
-
-    public_trials = [{key: value for key, value in trial.items() if key != "score"} for trial in trials]
-    return {
-        "time": round(churn_time, 6),
-        "recommendation": recommendation,
-        "trials": public_trials,
         "initialState": initial_state,
         "config": config.to_dict(),
     }

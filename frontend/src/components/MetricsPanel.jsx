@@ -8,8 +8,7 @@ function Stat({ label, value }) {
 }
 
 export default function MetricsPanel({ result, compareResult }) {
-  const onlinePeers = result.finalPeers?.filter((peer) => peer.online !== false) || [];
-  const completedPeers = onlinePeers.filter((peer) => peer.completion === 100).length;
+  const completedPeers = result.finalPeers?.filter((peer) => peer.completion === 100).length || 0;
   return (
     <section className="card">
       <h2>Metrics: {result.strategyName}</h2>
@@ -17,7 +16,7 @@ export default function MetricsPanel({ result, compareResult }) {
         <Stat label="Status" value={result.completed ? 'Completed' : 'Incomplete'} />
         <Stat label="Total virtual time" value={`${result.totalTime}s`} />
         <Stat label="Transfers" value={result.totalTransfers} />
-        <Stat label="Completed online peers" value={`${completedPeers}/${onlinePeers.length || 0}`} />
+        <Stat label="Completed peers" value={`${completedPeers}/${result.finalPeers?.length || 0}`} />
         {compareResult && <Stat label="Winner" value={compareResult.winner} />}
         {compareResult && <Stat label="Difference" value={`${compareResult.difference}s`} />}
       </div>

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from simulation.config import SimulationConfig
 from simulation.initial_state import generate_initial_state
-from simulation.service import compare_strategies, recommend_churn_candidate
+from simulation.service import compare_strategies
 from simulation.simulator import BitTorrentSimulator
 from simulation.strategies import RandomFirstStrategy, RarestFirstStrategy
 import random
@@ -167,35 +167,3 @@ def test_network_conditions_are_deterministic_but_source_dependent():
 
     assert first_duration == second_duration
     assert first_duration != other_source_duration
-
-
-def test_churn_offline_peer_removes_its_chunks_from_swarm():
-    config = SimulationConfig(file_size_mb=1, chunk_size_kb=256, peer_count=3, max_virtual_time=5)
-    initial_state = [[0], [1, 2, 3], [1, 2, 3]]
-    result = BitTorrentSimulator(
-        config=config,
-        strategy="rarestFirst",
-        initial_state=initial_state,
-        churn_events=[{"time": 0, "peerId": 0, "online": False}],
-    ).run()
-
-    assert result["completed"] is False
-    assert result["chunkAvailability"][0] == 0
-    assert any(log["event"] == "CHURN" and log["peerId"] == 0 and log["online"] is False for log in result["logs"])
-    assert result["finalPeers"][0]["online"] is False
-
-
-def test_churn_recommendation_returns_candidate_payload():
-    result = recommend_churn_candidate(
-        {
-            "seed": 9,
-            "initialChunkProbability": 0.15,
-            "downloadBandwidthKbps": 512,
-            "uploadBandwidthKbps": 512,
-            "time": 1.0,
-        }
-    )
-
-    assert result["recommendation"]["event"]["online"] is False
-    assert 0 <= result["recommendation"]["peerId"] < result["config"]["peer_count"]
-    assert len(result["trials"]) == 10
