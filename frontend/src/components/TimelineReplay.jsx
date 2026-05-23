@@ -16,7 +16,8 @@ export default function TimelineReplay({ timeline = [], totalChunks = 40, index,
 
   const summary = useMemo(() => {
     if (!snapshot) return null;
-    return `${snapshot.completedPeers}/${snapshot.peers.length} peers complete · average ${snapshot.averageCompletion}%`;
+    const onlinePeers = snapshot.onlinePeers ?? snapshot.peers.length;
+    return `${snapshot.completedPeers}/${onlinePeers} online peers complete - average ${snapshot.averageCompletion}%`;
   }, [snapshot]);
 
   if (!snapshot) return null;
@@ -48,9 +49,9 @@ export default function TimelineReplay({ timeline = [], totalChunks = 40, index,
       <p className="muted">{summary}</p>
       <div className="timeline-peers">
         {snapshot.peers.map((peer) => (
-          <div key={peer.peerId} className="timeline-peer">
+          <div key={peer.peerId} className={`timeline-peer ${peer.online === false ? 'offline' : ''}`}>
             <strong>P{peer.peerId}</strong>
-            <span>{peer.completion}%</span>
+            <span>{peer.online === false ? 'offline' : `${peer.completion}%`}</span>
             <ChunkGrid ownedChunks={peer.ownedChunks} totalChunks={totalChunks} />
           </div>
         ))}

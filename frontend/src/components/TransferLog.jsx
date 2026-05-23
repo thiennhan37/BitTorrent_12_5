@@ -23,9 +23,9 @@ export default function TransferLog({ logs = [] }) {
               <tr key={`${log.transferId}-${log.event}-${index}`}>
                 <td>{log.time}</td>
                 <td><span className={`event-pill ${log.event.toLowerCase()}`}>{log.event}</span></td>
-                <td>Peer {log.sourcePeer}</td>
-                <td>Peer {log.destinationPeer}</td>
-                <td>{log.chunkId}</td>
+                <td>{log.sourcePeer == null ? '-' : `Peer ${log.sourcePeer}`}</td>
+                <td>{log.destinationPeer == null ? '-' : `Peer ${log.destinationPeer}`}</td>
+                <td>{log.chunkId == null ? '-' : log.chunkId}</td>
                 <td>{log.duration}s</td>
               </tr>
             ))}

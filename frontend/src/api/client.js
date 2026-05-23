@@ -29,3 +29,10 @@ export function compareStrategies(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function recommendChurn(payload) {
+  return request('/api/churn/recommend', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
