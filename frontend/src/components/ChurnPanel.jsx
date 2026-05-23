@@ -10,6 +10,9 @@ export default function ChurnPanel({
   const recommendedPeer = recommendation?.peerId;
   const rareChunks = recommendation?.rareChunks || [];
 
+  const hasAnyChurnEvent = (churnEvents || []).length > 0;
+  const hasActiveChurnState = Array.from(effectivePeerStates?.entries?.() || []).length > 0;
+
   return (
     <section className="card churn-panel">
       <div className="section-header">
