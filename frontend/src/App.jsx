@@ -25,7 +25,7 @@ export default function App() {
   const [baselineCompareResult, setBaselineCompareResult] = useState(null);
   const [singleResult, setSingleResult] = useState(null);
   const [churnRecommendation, setChurnRecommendation] = useState(null);
-  const [churnScenario, setChurnScenario] = useState(null);
+  const [churnOverrides, setChurnOverrides] = useState({});
   const [selectedView, setSelectedView] = useState('rarestFirst');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -74,6 +74,16 @@ export default function App() {
     return timeline[safeIndex] || null;
   }, [activeResult, timelineIndex]);
 
+  const activeChurnEvents = useMemo(
+    () =>
+      Object.entries(churnOverrides).map(([peerId, online]) => ({
+        time: activeSnapshotTime,
+        peerId: Number(peerId),
+        online,
+      })),
+    [churnOverrides, activeSnapshotTime],
+  );
+
   async function handleCompare() {
     setLoading(true);
     setError('');
@@ -84,7 +94,7 @@ export default function App() {
       setCompareResult(result);
       setBaselineCompareResult(result);
       setChurnRecommendation(null);
-      setChurnScenario(null);
+      setChurnOverrides({});
       setSelectedView(result.winner === 'randomFirst' ? 'randomFirst' : 'rarestFirst');
     } catch (err) {
       setError(err.message);
@@ -99,7 +109,7 @@ export default function App() {
     setCompareResult(null);
     setBaselineCompareResult(null);
     setChurnRecommendation(null);
-    setChurnScenario(null);
+    setChurnOverrides({});
     setTimelineIndex(0);
     try {
       const result = await simulate({ ...form, strategy });
@@ -132,21 +142,26 @@ export default function App() {
     }
   }
 
-  async function handleApplyChurn(peerId, time = activeSnapshotTime) {
+  async function updateChurnScenario(nextOverrides) {
     const baseline = baselineCompareResult || compareResult;
-    if (!baseline || time == null || peerId == null) return;
+    if (!baseline || activeSnapshotTime == null) return;
 
-    const event = { time, peerId, online: false };
+    const churnEvents = Object.entries(nextOverrides).map(([peerId, online]) => ({
+      time: activeSnapshotTime,
+      peerId: Number(peerId),
+      online,
+    }));
+
     setLoading(true);
     setError('');
     try {
       const result = await compareStrategies({
         ...form,
         initialState: baseline.initialState,
-        churnEvents: [event],
+        churnEvents,
       });
       setCompareResult(result);
-      setChurnScenario(event);
+      setChurnOverrides(nextOverrides);
       setSelectedView(result.winner === 'rarestFirst' ? 'rarestFirst' : 'randomFirst');
       setTimelineIndex(0);
     } catch (err) {
@@ -156,11 +171,29 @@ export default function App() {
     }
   }
 
+  async function handleTogglePeer(peerId) {
+    const nextOverrides = { ...churnOverrides };
+    const current = nextOverrides[peerId];
+    if (current === false) {
+      nextOverrides[peerId] = true;
+    } else if (current === true) {
+      delete nextOverrides[peerId];
+    } else {
+      nextOverrides[peerId] = false;
+    }
+    await updateChurnScenario(nextOverrides);
+  }
+
+  async function handleApplyRecommendation(peerId) {
+    if (peerId == null) return;
+    await updateChurnScenario({ ...churnOverrides, [peerId]: false });
+  }
+
   function handleResetChurn() {
     if (!baselineCompareResult) return;
     setCompareResult(baselineCompareResult);
     setChurnRecommendation(null);
-    setChurnScenario(null);
+    setChurnOverrides({});
     setTimelineIndex(0);
   }
 
@@ -190,21 +223,17 @@ export default function App() {
       {error && <div className="alert">{error}</div>}
 
       {compareResult && (
-        <StrategyComparison
-          result={compareResult}
-          selectedView={selectedView}
-          setSelectedView={setSelectedView}
-        />
+        <StrategyComparison result={compareResult} selectedView={selectedView} setSelectedView={setSelectedView} />
       )}
 
       {compareResult && (
         <ChurnPanel
           snapshotTime={activeSnapshotTime}
           recommendation={churnRecommendation}
-          churnScenario={churnScenario}
+          churnEvents={activeChurnEvents}
           loading={loading}
           onRecommend={handleRecommendChurn}
-          onApply={handleApplyChurn}
+          onApply={handleApplyRecommendation}
           onReset={handleResetChurn}
         />
       )}
@@ -220,7 +249,7 @@ export default function App() {
               maxTime={activeSnapshotTime}
               peers={activeSnapshot?.peers || activeResult.finalPeers}
               recommendedPeerId={churnRecommendation?.peerId}
-              onPeerClick={compareResult ? handleApplyChurn : null}
+              onPeerClick={compareResult ? handleTogglePeer : null}
             />
           </section>
           <TimelineReplay
