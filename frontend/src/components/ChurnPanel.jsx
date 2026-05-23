@@ -2,7 +2,6 @@ export default function ChurnPanel({
   snapshotTime,
   recommendation,
   churnEvents,
-  effectivePeerStates,
   loading,
   onRecommend,
   onApply,
@@ -21,11 +20,11 @@ export default function ChurnPanel({
           <h2>Peer churn what-if</h2>
           <p className="muted">Current timeline point: t = {snapshotTime == null ? '0' : snapshotTime}s</p>
         </div>
-        {hasActiveChurnState && (
+        {!!churnEvents?.length && (
           <div className="churn-badge-list">
-            {Array.from(effectivePeerStates.entries()).map(([peerId, online]) => (
-              <span key={`active-${peerId}`} className={`churn-badge ${online ? 'online' : 'offline'}`}>
-                Peer {peerId} {online ? 'online' : 'offline'} @ t={snapshotTime}s
+            {churnEvents.map((event) => (
+              <span key={`churn-${event.peerId}`} className={`churn-badge ${event.online ? 'online' : 'offline'}`}>
+                Peer {event.peerId} {event.online ? 'online' : 'offline'} at {event.time}s
               </span>
             ))}
           </div>
@@ -41,7 +40,7 @@ export default function ChurnPanel({
             Apply Peer {recommendedPeer} offline
           </button>
         )}
-        {hasAnyChurnEvent && (
+        {!!churnEvents?.length && (
           <button className="ghost" onClick={onReset} disabled={loading}>
             Back to baseline
           </button>
@@ -55,6 +54,7 @@ export default function ChurnPanel({
             <span>Random: {recommendation.randomCompleted ? `${recommendation.randomTotalTime}s` : 'incomplete'}</span>
             <span>Rarest: {recommendation.rarestCompleted ? `${recommendation.rarestTotalTime}s` : 'incomplete'}</span>
             <span>Rare chunks: {rareChunks.length ? rareChunks.slice(0, 8).join(', ') : 'none'}</span>
+            <span>Tip: click peers on graph to toggle offline → online → baseline</span>
           </div>
         </div>
       )}
