@@ -199,3 +199,20 @@ def test_churn_recommendation_returns_candidate_payload():
     assert result["recommendation"]["event"]["online"] is False
     assert 0 <= result["recommendation"]["peerId"] < result["config"]["peer_count"]
     assert len(result["trials"]) == 10
+
+
+def test_churn_recommendation_respects_existing_churn_events():
+    result = recommend_churn_candidate(
+        {
+            "seed": 9,
+            "initialChunkProbability": 0.15,
+            "downloadBandwidthKbps": 512,
+            "uploadBandwidthKbps": 512,
+            "time": 1.0,
+            "churnEvents": [{"time": 0.0, "peerId": 0, "online": False}],
+        }
+    )
+
+    trial_peer_ids = {trial["peerId"] for trial in result["trials"]}
+    assert 0 not in trial_peer_ids
+    assert len(result["trials"]) == 9
