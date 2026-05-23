@@ -44,8 +44,7 @@ export default function App() {
             data.upload_bandwidth ??
             data.uploadBandwidthKbps ??
             data.upload_bandwidth_kbps ??
-            data.effectiveUploadBandwidthKbps ??
-            128,
+            data.effectiveUploadBandwidthKbps ?? 128,
           latencyMs: data.latency_ms ?? data.latencyMs ?? 50,
           initialChunkProbability: data.initial_chunk_probability ?? data.initialChunkProbability ?? 0.3,
           max_download_slots: data.max_download_slots ?? data.maxDownloadSlots ?? 2,
@@ -82,7 +81,11 @@ export default function App() {
         online: event.online,
       })),
     [churnOverrides],
-  );
+  );  
+
+  useEffect(() => {
+    setChurnRecommendation(null);
+  }, [activeSnapshotTime, churnOverrides, selectedView]);
 
   async function handleCompare() {
     setLoading(true);
@@ -126,6 +129,12 @@ export default function App() {
     const baseline = baselineCompareResult || compareResult;
     if (!baseline) return;
 
+    const churnEvents = Object.entries(churnOverrides).map(([peerId, event]) => ({
+      time: event.time,
+      peerId: Number(peerId),
+      online: event.online,
+    }));
+
     setLoading(true);
     setError('');
     try {
@@ -133,6 +142,7 @@ export default function App() {
         ...form,
         initialState: baseline.initialState,
         time: activeSnapshotTime,
+        churnEvents: activeChurnEvents,
       });
       setChurnRecommendation(result.recommendation);
     } catch (err) {
@@ -162,6 +172,7 @@ export default function App() {
       });
       setCompareResult(result);
       setChurnOverrides(nextOverrides);
+      setChurnRecommendation(null);
       setSelectedView(result.winner === 'rarestFirst' ? 'rarestFirst' : 'randomFirst');
       setTimelineIndex(0);
     } catch (err) {
