@@ -76,12 +76,12 @@ export default function App() {
 
   const activeChurnEvents = useMemo(
     () =>
-      Object.entries(churnOverrides).map(([peerId, online]) => ({
-        time: activeSnapshotTime,
+      Object.entries(churnOverrides).map(([peerId, event]) => ({
+        time: event.time,
         peerId: Number(peerId),
-        online,
+        online: event.online,
       })),
-    [churnOverrides, activeSnapshotTime],
+    [churnOverrides],
   );
 
   async function handleCompare() {
@@ -124,7 +124,7 @@ export default function App() {
 
   async function handleRecommendChurn() {
     const baseline = baselineCompareResult || compareResult;
-    if (!baseline || activeSnapshotTime == null) return;
+    if (!baseline) return;
 
     setLoading(true);
     setError('');
@@ -146,10 +146,10 @@ export default function App() {
     const baseline = baselineCompareResult || compareResult;
     if (!baseline || activeSnapshotTime == null) return;
 
-    const churnEvents = Object.entries(nextOverrides).map(([peerId, online]) => ({
-      time: activeSnapshotTime,
+    const churnEvents = Object.entries(nextOverrides).map(([peerId, event]) => ({
+      time: event.time,
       peerId: Number(peerId),
-      online,
+      online: event.online,
     }));
 
     setLoading(true);
@@ -174,19 +174,19 @@ export default function App() {
   async function handleTogglePeer(peerId) {
     const nextOverrides = { ...churnOverrides };
     const current = nextOverrides[peerId];
-    if (current === false) {
-      nextOverrides[peerId] = true;
-    } else if (current === true) {
+    if (current?.online === false) {
+      nextOverrides[peerId] = { online: true, time: activeSnapshotTime ?? 0 };
+    } else if (current?.online === true) {
       delete nextOverrides[peerId];
     } else {
-      nextOverrides[peerId] = false;
+      nextOverrides[peerId] = { online: false, time: activeSnapshotTime ?? 0 };
     }
     await updateChurnScenario(nextOverrides);
   }
 
   async function handleApplyRecommendation(peerId) {
     if (peerId == null) return;
-    await updateChurnScenario({ ...churnOverrides, [peerId]: false });
+    await updateChurnScenario({ ...churnOverrides, [peerId]: { online: false, time: activeSnapshotTime ?? 0 } });
   }
 
   function handleResetChurn() {
@@ -264,3 +264,5 @@ export default function App() {
     </main>
   );
 }
+
+
