@@ -205,6 +205,95 @@ th { color: #475569; font-size: 0.82rem; text-transform: uppercase; letter-spaci
   font-weight: 700;
 }
 
+.statistics-panel {
+  display: grid;
+  gap: 18px;
+}
+.stats-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(96px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+.stats-controls label {
+  font-size: 0.82rem;
+}
+.stats-controls input {
+  min-width: 0;
+}
+.charts-grid {
+  display: grid;
+  gap: 16px;
+}
+.chart-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fbfdff;
+  padding: 16px;
+  overflow-x: auto;
+}
+.section-header.compact {
+  align-items: flex-start;
+}
+.section-header.compact h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+.section-header.compact p {
+  margin: 0;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 8px 0 4px;
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.stats-chart {
+  width: 100%;
+  min-width: 680px;
+  height: auto;
+}
+.chart-grid-line {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+}
+.chart-grid-line.vertical {
+  opacity: 0.45;
+}
+.chart-axis {
+  stroke: #475569;
+  stroke-width: 1.5;
+}
+.chart-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chart-tick {
+  fill: #64748b;
+  font-size: 11px;
+}
+.chart-axis-label {
+  fill: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 
 .form-group-section h3 {
   margin-top: 8px;     /* Khoảng cách phía trên tiêu đề nhóm */
@@ -240,6 +329,12 @@ th { color: #475569; font-size: 0.82rem; text-transform: uppercase; letter-spaci
   .form-field-wide {
     grid-column: span 2;
   }
+  .stats-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .stats-controls button {
+    grid-column: 1 / -1;
+  }
 }
 @media (max-width: 500px) {
   .form-grid {
@@ -247,5 +342,8 @@ th { color: #475569; font-size: 0.82rem; text-transform: uppercase; letter-spaci
   }
   .form-field-wide {
     grid-column: span 1;
+  }
+  .stats-controls {
+    grid-template-columns: 1fr;
   }
 }
