@@ -20,6 +20,8 @@ class NetworkModel:
         Random-First and Rarest-First, while still making source choice matter.
         """
 
+        # nhân với các số prime để giảm xung đột -> giữ lại 32 bit cuối
+        # kĩ thuật hash
         value = (
             (self.config.seed + 1) * 1_000_003
             + (source.id + 1) * 91_193
@@ -46,8 +48,8 @@ class NetworkModel:
         return base_latency_ms * self.link_latency_factor(source, destination)
     
     def link_latency_factor(self, source: Peer, destination: Peer) -> float:
-        # Directed peer links vary between 75% and 175% of the configured base.
-        return 0.75 + self._link_unit(source, destination, salt=2)
+        # Directed peer links vary between 100% and 175% of the configured base.
+        return 1.0 + self._link_unit(source, destination, salt=2)
 
     def shared_upload_bandwidth(self, source: Peer) -> float:
         # Upload cua mot peer duoc chia deu cho tat ca upload dang active.

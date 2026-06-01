@@ -10,6 +10,7 @@ from .models import Peer, TransferRecord
 from .network import NetworkModel
 from .simpy_compat import Environment
 from .strategies import build_strategy
+from .topology import NeighborGraph, build_neighbor_graph, graph_to_dict
 
 
 class BitTorrentSimulator:
@@ -26,6 +27,7 @@ class BitTorrentSimulator:
         strategy: str = "randomFirst",
         initial_state: list[list[int]] | list[set[int]] | None = None,
         churn_events: list[dict[str, Any]] | None = None,
+        neighbor_graph: Any | None = None,
     ) -> None:
         self.config = config or SimulationConfig()
         self.config.validate()
@@ -36,6 +38,7 @@ class BitTorrentSimulator:
         self.network = NetworkModel(self.config)
         self.strategy = build_strategy(strategy, self.rng, self.network)
         self.churn_events = self._normalize_churn_events(churn_events or [])
+        self.neighbor_graph: NeighborGraph = build_neighbor_graph(self.config, neighbor_graph)
         # Global event dung de danh thuc tat ca peer khi swarm co thay doi quan trong:
         # chunk moi xuat hien hoac slot/bandwidth duoc giai phong sau khi transfer ket thuc.
         self.swarm_event = self.env.event()
@@ -64,6 +67,7 @@ class BitTorrentSimulator:
                     latency_ms=self.config.latency_ms,
                     max_download_slots=self.config.max_download_slots,
                     max_upload_slots=self.config.max_upload_slots,
+                    neighbors=set(self.neighbor_graph.get(peer_id, set())),
                 )
             )
         return peers
@@ -121,7 +125,6 @@ class BitTorrentSimulator:
 
     # flush event khi hệ thống có thay đổi, đánh thức các peer đang ngủ hoạt động lấy chunk tiếp.
     def _wake_swarm(self) -> None:
-        """Flush the global event and replace it for the next scheduling wave."""
 
         # đẩm bảo các event chưa được đánh dấu trigger(chưa được kích hoạt)
         # nếu đã triggered mà đánh dấu succeed lần nữa sẽ lỗi 
@@ -162,6 +165,7 @@ class BitTorrentSimulator:
             }
         )
 
+    # log ra sự kiện churn
     def _log_churn_event(self, peer: Peer, online: bool) -> None:
         current_time = float(self.env.now)
         self.logs.append(
@@ -207,6 +211,7 @@ class BitTorrentSimulator:
         )
         self.logs[-1]["reason"] = reason
 
+    # Hủy các transfer hiện đang upload/download bởi peer bị offline
     def _cancel_peer_transfers(self, peer: Peer) -> None:
         transfer_ids = [
             transfer_id
@@ -219,6 +224,7 @@ class BitTorrentSimulator:
     def _apply_churn_event(self, event: dict[str, Any]) -> None:
         peer = self.peers[event["peerId"]]
         online = event["online"]
+        # tránh update trùng trạng thái cũ
         if peer.online != online:
             peer.online = online
             if not online:
@@ -226,11 +232,13 @@ class BitTorrentSimulator:
 
         self._log_churn_event(peer, online)
         self._record_progress()
+        # kiểm tra các peer online đều đã hoàn thành thì xác nhận completed
         if self.all_complete() and not self.completed:
             self.completed = True
             self.total_completion_time = float(self.env.now)
         self._wake_swarm()
 
+    # đăng kí các churn event theo thứ tự thời gian 
     def _churn_process(self) -> Generator[Any, Any, None]:
         for event in self.churn_events:
             delay = event["time"] - float(self.env.now)
@@ -241,7 +249,6 @@ class BitTorrentSimulator:
             self._apply_churn_event(event)
 
     def _start_transfer(self, destination: Peer, source: Peer, chunk_id: int) -> bool:
-        """Reserve slots and spawn a tick-based transfer process."""
 
         if not destination.can_start_download(chunk_id) or not source.can_upload_to(destination, chunk_id):
             return False
@@ -440,6 +447,11 @@ class BitTorrentSimulator:
             "transfers": [record.to_dict() for record in self.transfer_records],
             "progressTimeline": self.progress_timeline,
             "initialState": clone_initial_state(self.initial_state),
+            "neighborGraph": graph_to_dict(
+                self.neighbor_graph,
+                self.config.topology_mode,
+                self.config.neighbors_per_peer,
+            ),
             "finalPeers": final_peers,
             "chunkAvailability": self.chunk_availability(),
             "config": self.config.to_dict(),
