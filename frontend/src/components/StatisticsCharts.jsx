@@ -1,6 +1,32 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 const CHART_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706'];
+
+const TOPOLOGY_LABELS = {
+  fullMesh: 'Full mesh',
+  randomK: 'Random k-neighbor',
+  ring: 'Ring',
+  smallWorld: 'Small world',
+  star: 'Peer 0 hub',
+  custom: 'Custom adjacency',
+};
+
+const INITIAL_CHUNK_TYPE_LABELS = {
+  balancedRandom: 'Balanced random',
+  singleSeeder: 'Peer 0 seeder',
+};
+
+function formatTopologyMode(mode) {
+  return TOPOLOGY_LABELS[mode] || mode || '—';
+}
+
+function formatInitialChunkType(mode) {
+  return INITIAL_CHUNK_TYPE_LABELS[mode] || mode || '—';
+}
+
+function buildChartConfigTitle(baseTitle, topologyMode, initialChunkType) {
+  return `${baseTitle} (Topology: ${formatTopologyMode(topologyMode)} · Initial chunks: ${formatInitialChunkType(initialChunkType)})`;
+}
 
 function niceTicks(maxValue, count = 5) {
   const safeMax = Math.max(Number(maxValue) || 0, 1);
@@ -187,6 +213,7 @@ function GroupedBarChart({ title, subtitle, bars }) {
 }
 
 export default function StatisticsCharts({ form, result, loading, onBuild }) {
+  const [isExpanded, setIsExpanded] = useState(true);
   const [controls, setControls] = useState({
     seedStart: Number(form.seed || 1),
     seedEnd: Number(form.seed || 1) + 9,
@@ -222,39 +249,77 @@ export default function StatisticsCharts({ form, result, loading, onBuild }) {
     points: row.points.map((point) => ({ x: point.completion, y: point.rareChunks })),
   }));
 
+  const chartConfig = useMemo(() => {
+    const source = result?.config ?? form;
+    return {
+      topologyMode: source.topologyMode ?? source.topology_mode ?? form.topologyMode,
+      initialChunkType: source.initialDistributionMode ?? source.initial_distribution_mode ?? form.initialDistributionMode,
+    };
+  }, [result, form]);
+
+  const chart3InitialChunkTypes = useMemo(() => {
+    const modes = [...new Set(rareRows.map((row) => row.distributionMode).filter(Boolean))];
+    if (!modes.length) return formatInitialChunkType(chartConfig.initialChunkType);
+    return modes.map((mode) => formatInitialChunkType(mode)).join(' & ');
+  }, [rareRows, chartConfig.initialChunkType]);
+
+  const chart1Title = buildChartConfigTitle(
+    'Chart 1: Seed range',
+    chartConfig.topologyMode,
+    chartConfig.initialChunkType,
+  );
+  const chart3Title = `Chart 3: Rare chunks by completion level (Topology: ${formatTopologyMode(chartConfig.topologyMode)} · Initial chunks: ${chart3InitialChunkTypes})`;
+
   return (
-    <section className="card statistics-panel">
+    <section className={`card statistics-panel${isExpanded ? '' : ' statistics-panel--collapsed'}`}>
       <div className="section-header">
-        <div>
-          <h2>Thong ke bieu do</h2>
-          <p className="muted">Chay batch theo config hien tai de so sanh thuat toan, topology va so chunk hiem.</p>
-        </div>
-        <div className="stats-controls">
-          <label>
-            Seed start
-            <input type="number" value={controls.seedStart} onChange={(event) => updateControl('seedStart', event.target.value)} />
-          </label>
-          <label>
-            Seed end
-            <input type="number" value={controls.seedEnd} onChange={(event) => updateControl('seedEnd', event.target.value)} />
-          </label>
-          <label>
-            Step
-            <input type="number" min="1" value={controls.seedStep} onChange={(event) => updateControl('seedStep', event.target.value)} />
-          </label>
-          <button onClick={() => onBuild(controls)} disabled={loading}>
-            {loading ? 'Dang ve...' : 'Ve bieu do'}
+        <div className="statistics-panel-title">
+          <button
+            type="button"
+            className="statistics-panel-toggle"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? 'Hide chart statistics' : 'Show chart statistics'}
+          >
+            <span aria-hidden="true">{isExpanded ? '▲' : '▼'}</span>
           </button>
+          <div>
+            <h2>Chart Statistics</h2>
+            <p className="muted">
+              Run a batch with the current config to compare strategies, topologies, and rare chunk counts.
+            </p>
+          </div>
         </div>
+        {isExpanded && (
+          <div className="stats-controls">
+            <label>
+              Seed start
+              <input type="number" value={controls.seedStart} onChange={(event) => updateControl('seedStart', event.target.value)} />
+            </label>
+            <label>
+              Seed end
+              <input type="number" value={controls.seedEnd} onChange={(event) => updateControl('seedEnd', event.target.value)} />
+            </label>
+            <label>
+              Step
+              <input type="number" min="1" value={controls.seedStep} onChange={(event) => updateControl('seedStep', event.target.value)} />
+            </label>
+            <button onClick={() => onBuild(controls)} disabled={loading}>
+              {loading ? 'Building...' : 'Build charts'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {!result && <p className="muted">Bam "Ve bieu do" de tao 3 bieu do tu cau hinh dang chon.</p>}
+      {isExpanded && !result && (
+        <p className="muted">Click &quot;Build charts&quot; to generate 3 charts from the selected configuration.</p>
+      )}
 
-      {result && (
+      {isExpanded && result && (
         <div className="charts-grid">
           <LineChart
-            title="Bieu do 1: Seed range"
-            subtitle="X la seed, Y la thoi gian hoan thanh cua Random-First va Rarest-First."
+            title={chart1Title}
+            subtitle="X is seed; Y is completion time for Random-First and Rarest-First."
             xLabel="Seed"
             yLabel="Time (seconds)"
             ySuffix="s"
@@ -263,13 +328,13 @@ export default function StatisticsCharts({ form, result, loading, onBuild }) {
             xTicks={seedTicks}
           />
           <GroupedBarChart
-            title="Bieu do 2: Topology"
-            subtitle="Moi topology co 2 cot thoi gian: Random-First va Rarest-First."
+            title="Chart 2: Topology"
+            subtitle="Each topology has two time bars: Random-First and Rarest-First."
             bars={topologyRows}
           />
           <LineChart
-            title="Bieu do 3: Rare chunks theo muc do hoan thanh"
-            subtitle={`X nhay ${result.completionStep}%, Y la so chunk co <= ${result.rareThreshold} peer so huu.`}
+            title={chart3Title}
+            subtitle={`X steps by ${result.completionStep}%; Y is the number of chunks owned by <= ${result.rareThreshold} peers.`}
             xLabel="System completion (%)"
             yLabel="Rare chunks"
             series={rareSeries}

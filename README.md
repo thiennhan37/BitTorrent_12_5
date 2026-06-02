@@ -1,78 +1,106 @@
 # BitTorrent-style Chunking: Large File Distribution
 
-Đồ án mô phỏng cơ chế phân phối file lớn theo phong cách BitTorrent cho môn **Cơ sở dữ liệu phân tán / Hệ phân tán**.
+Mô phỏng phân phối file lớn theo cơ chế **BitTorrent** (chia chunk, peer vừa tải vừa chia sẻ) cho môn **Cơ sở dữ liệu phân tán / Hệ phân tán**.
 
-Project này đã chuyển mô phỏng sang hướng **event-based virtual time**: mỗi peer là một process độc lập, peer rảnh sẽ tự chọn chunk còn thiếu, chọn source peer đang có chunk đó, chờ thời gian truyền ảo rồi cập nhật trạng thái ngay tại thời điểm event kết thúc.
+Hệ thống dùng **mô phỏng discrete-event với thời gian ảo (SimPy)**: mỗi peer là một process độc lập, tự chọn chunk theo chiến lược, truyền dữ liệu theo tick và cập nhật trạng thái swarm khi transfer kết thúc — không chờ thời gian thật.
 
-## Tính năng chính
+**Báo cáo chi tiết:** xem [REPORT.md](./REPORT.md).
 
-- File master cố định: **10MB**.
-- Chunk size: **256KB**.
-- Tổng số chunk: **40**.
-- Số peer: **10**.
-- Sinh initial state ngẫu nhiên theo seed, nhưng bảo đảm mỗi chunk có ít nhất một peer sở hữu.
-- So sánh công bằng hai chiến lược:
-  - **Random-First**
-  - **Rarest-First**
-- Backend Flask API.
-- Core simulation viết theo kiểu SimPy process/event.
-- Frontend React dashboard.
-- Có log START/END kèm timestamp, source peer, destination peer, chunk id.
-- Có progress timeline, chunk grid, metrics và network graph.
+---
+
+## Tóm tắt
+
+| Hạng mục | Mô tả |
+|----------|--------|
+| File mô phỏng | 10 MB → 40 chunk × 256 KB |
+| Swarm | 10 peer |
+| Chiến lược | **Random-First** vs **Rarest-First** |
+| Backend | Python, Flask, SimPy |
+| Frontend | React, Vite |
+| Metric chính | `totalTime` — virtual time khi mọi peer **online** hoàn thành file |
+
+---
+
+## Tính năng
+
+- So sánh công bằng hai chiến lược trên **cùng seed** và **cùng initial state**
+- Topology mạng: full mesh, random-k, ring, star, small-world, custom adjacency
+- Phân phối chunk ban đầu: balanced random hoặc single seeder (peer 0)
+- Mô hình mạng: chia bandwidth theo slot, hệ số link deterministic theo cặp peer
+- **Churn:** peer online/offline tại thời điểm ảo; gợi ý peer nên tắt để demo contrast giữa hai strategy
+- **Thống kê batch:** so sánh nhiều seed, nhiều topology, biểu đồ chunk hiếm theo tiến độ
+- Dashboard: metrics, đồ thị láng giềng, mạng truyền chunk, timeline replay, transfer log
+
+---
 
 ## Cấu trúc thư mục
 
 ```text
-bittorrent_style_chunking_complete/
-  backend/
-    app.py
-    run_compare.py
-    requirements.txt
-    simulation/
-      config.py
-      initial_state.py
-      models.py
-      network.py
-      service.py
-      simpy_compat.py
-      simulator.py
-      strategies.py
-    tests/
-      test_simulator.py
-  frontend/
-    package.json
-    index.html
-    src/
-      App.jsx
-      api/client.js
-      components/
-      styles.css
-  README.md
-  REPORT.md
+BitTorrent_12_5/
+├── README.md
+├── REPORT.md
+├── backend/
+│   ├── app.py                 # Flask API
+│   ├── run_compare.py         # So sánh CLI
+│   ├── requirements.txt
+│   ├── simulation/
+│   │   ├── config.py          # Tham số mô phỏng
+│   │   ├── models.py          # Peer, TransferRecord
+│   │   ├── initial_state.py   # Sinh trạng thái ban đầu
+│   │   ├── network.py         # Bandwidth / latency
+│   │   ├── topology.py        # Đồ thị láng giềng
+│   │   ├── strategies.py      # Random-First, Rarest-First
+│   │   ├── simulator.py       # SimPy core
+│   │   ├── service.py         # Orchestration, stats, churn
+│   │   └── simpy_compat.py    # Fallback khi không có SimPy
+│   └── tests/
+│       └── test_simulator.py
+└── frontend/
+    ├── package.json
+    └── src/
+        ├── App.jsx
+        ├── api/client.js
+        ├── components/
+        └── styles.css
 ```
 
-## Cài đặt backend
+---
+
+## Yêu cầu
+
+- **Python** 3.10+
+- **Node.js** 18+ (cho frontend)
+
+---
+
+## Cài đặt và chạy
+
+### Backend
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
 ```
 
-Chạy API:
+**Windows (PowerShell):**
 
-```bash
+```powershell
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 python app.py
 ```
 
-API chạy mặc định tại:
+**Linux / macOS:**
 
-```text
-http://localhost:5000
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+python app.py
 ```
 
-Chạy thử so sánh ở terminal:
+API mặc định: **http://localhost:5000**
+
+Chạy so sánh nhanh trên terminal:
 
 ```bash
 python run_compare.py
@@ -84,7 +112,7 @@ Chạy test:
 python -m pytest -q
 ```
 
-## Cài đặt frontend
+### Frontend
 
 ```bash
 cd frontend
@@ -92,105 +120,182 @@ npm install
 npm run dev
 ```
 
-Frontend chạy mặc định tại:
+UI mặc định: **http://localhost:5173**
 
-```text
-http://localhost:5173
-```
+Nếu backend ở host/port khác, tạo `frontend/.env`:
 
-Nếu backend chạy ở host khác, tạo file `.env` trong `frontend/`:
-
-```text
+```env
 VITE_API_BASE=http://localhost:5000
 ```
 
+---
+
+## Sử dụng dashboard
+
+1. Mở **http://localhost:5173** (backend phải đang chạy).
+2. Chỉnh **seed**, bandwidth, latency, topology, slots, xác suất chunk ban đầu.
+3. **Compare strategies** — chạy Random-First và Rarest-First trên cùng điều kiện.
+4. **Simulate** — chạy một chiến lược (chọn trong panel).
+5. Dùng **timeline** để replay trạng thái swarm; xem **transfer log** và **network graph**.
+6. (Sau Compare) **Statistics** — batch nhiều seed/topology; **Churn** — gợi ý / bật tắt peer tại thời điểm trên timeline.
+
+---
+
 ## API
 
-### GET `/api/config`
+### `GET /api/health`
 
-Trả về cấu hình mặc định của mô phỏng.
+Kiểm tra server.
 
-### POST `/api/simulate`
+### `GET /api/config`
 
-Chạy một strategy cụ thể.
+Trả về cấu hình mặc định (`SimulationConfig`).
 
-Request mẫu:
+### `POST /api/simulate`
+
+Chạy một chiến lược.
+
+**Body mẫu:**
 
 ```json
 {
   "strategy": "rarestFirst",
   "seed": 9,
-  "bandwidthKbps": 512,
+  "download_bandwidth": 128,
+  "upload_bandwidth": 128,
   "latencyMs": 50,
-  "initialChunkProbability": 0.15
+  "initialChunkProbability": 0.3,
+  "initialDistributionMode": "balancedRandom",
+  "topologyMode": "fullMesh",
+  "neighborsPerPeer": 4,
+  "max_download_slots": 2,
+  "max_upload_slots": 3
 }
 ```
 
-Response gồm:
+**Response chính:** `totalTime`, `completed`, `logs`, `transfers`, `progressTimeline`, `finalPeers`, `chunkAvailability`, `neighborGraph`, `config`.
 
-```text
-totalTime, logs, transfers, progressTimeline, finalPeers, chunkAvailability, config
+### `POST /api/simulate/compare`
+
+Chạy Random-First và Rarest-First trên **cùng** `initialState` (sinh từ seed nếu không gửi).
+
+**Body mẫu:** giống `/api/simulate` (không cần `strategy`).
+
+**Response rút gọn:**
+
+```json
+{
+  "randomFirst": { "totalTime": 42.5, "completed": true },
+  "rarestFirst": { "totalTime": 38.1, "completed": true },
+  "winner": "rarestFirst",
+  "difference": 4.4,
+  "initialState": [[0, 1, 5], "..."],
+  "neighborGraph": { "0": [1, 2], "...": [] }
+}
 ```
 
-### POST `/api/simulate/compare`
+### `POST /api/churn/recommend`
 
-Chạy cả Random-First và Rarest-First trên cùng initial state.
-
-Request mẫu:
+Gợi ý peer nên **offline** tại thời điểm `time` để minh họa Random không hoàn thành trong khi Rarest vẫn xong (nếu có).
 
 ```json
 {
   "seed": 9,
-  "bandwidthKbps": 512,
-  "latencyMs": 50,
-  "initialChunkProbability": 0.15
+  "time": 12.5,
+  "initialState": [],
+  "churnEvents": []
 }
 ```
 
-Response mẫu rút gọn:
+### `POST /api/statistics/charts`
+
+Chạy batch so sánh (tối đa 50 seed/lần).
 
 ```json
 {
-  "randomFirst": { "totalTime": 18.25, "logs": [], "progressTimeline": [], "finalPeers": [] },
-  "rarestFirst": { "totalTime": 16.2, "logs": [], "progressTimeline": [], "finalPeers": [] },
-  "winner": "rarestFirst"
+  "seedStart": 1,
+  "seedEnd": 10,
+  "seedStep": 1,
+  "rareThreshold": 3,
+  "completionStep": 5
 }
 ```
 
-## Công thức thời gian truyền
+Trả về `charts.seedComparison`, `charts.topologyComparison`, `charts.rareChunkProgress`.
+
+---
+
+## Tham số mô phỏng mặc định
+
+| Tham số | Mặc định |
+|---------|----------|
+| `file_size_mb` | 10 |
+| `chunk_size_kb` | 256 → **40 chunk** |
+| `peer_count` | 10 |
+| `seed` | 1 |
+| `initial_chunk_probability` | 0.3 |
+| `initial_distribution_mode` | `balancedRandom` |
+| `topology_mode` | `fullMesh` |
+| `neighbors_per_peer` | 4 |
+| `bandwidth_kbps` (download) | 128 KB/s |
+| `upload_bandwidth_kbps` | 128 KB/s |
+| `latency_ms` | 50 |
+| `max_download_slots` | 2 |
+| `max_upload_slots` | 3 |
+| `transfer_tick_duration` | 0.1 s |
+
+**Điều kiện dừng:** mọi peer **đang online** sở hữu đủ 40 chunk.
+
+---
+
+## Chiến lược (tóm tắt)
+
+| | Random-First | Rarest-First |
+|---|--------------|--------------|
+| Chọn chunk | Ngẫu nhiên trong các chunk có thể tải | Chunk có ít bản sao nhất (kể cả transfer đang chạy) |
+| Chọn source | Ưu tiên thời gian ước lượng ngắn nhất | Giống Random-First |
+
+Chi tiết thuật toán và mô hình mạng: [REPORT.md](./REPORT.md).
+
+---
+
+## Mô hình thời gian truyền
+
+Transfer không dùng một công thức cố định cho toàn bộ phiên; mỗi **tick** (0.1 s) tính lại:
 
 ```text
-download_time = latency + chunk_size / bandwidth
+effective_bandwidth = min(shared_upload, shared_download) × link_factor
+shared_upload   = upload_bandwidth / số upload đang active
+shared_download = download_bandwidth / số download đang active
 ```
 
-Trong code:
+Ước lượng tổng thời gian (test / tương thích):
 
 ```text
-latency = latency_ms / 1000
-chunk_size = 256 KB
-bandwidth = min(source_upload_bandwidth, destination_download_bandwidth)
+duration ≈ latency_s + chunk_size_kb / effective_bandwidth
 ```
 
-Đơn vị bandwidth trong project là **KB/s** để công thức trực tiếp và dễ trình bày.
+Đơn vị bandwidth: **KB/s**. Latency và hệ số link giữa từng cặp peer là **deterministic** theo `seed` + id peer.
 
-## Ý nghĩa thuật toán
+---
 
-### Random-First
+## Ghi chú kỹ thuật
 
-Mỗi peer lấy danh sách chunk còn thiếu, lọc các chunk có ít nhất một peer khác đang upload được, rồi chọn ngẫu nhiên.
+- **`simpy_compat.py`:** fallback nhỏ khi không cài SimPy; môi trường dev nên cài `requirements.txt` để dùng SimPy thật.
+- Peer chỉ tải từ **láng giềng** trong topology (trừ full mesh = mọi peer là láng giềng).
+- So sánh hai strategy: cùng seed, initial state, topology, churn — khác biệt chỉ ở thuật toán chọn chunk.
 
-Ưu điểm: đơn giản, dễ cài đặt.
+---
 
-Nhược điểm: có thể bỏ qua chunk hiếm, làm một số chunk bị lan truyền chậm.
+## Tài liệu liên quan
 
-### Rarest-First
+| File | Nội dung |
+|------|----------|
+| [REPORT.md](./REPORT.md) | Báo cáo đồ án: kiến trúc, mô hình, thuật toán, kết luận |
+| `backend/tests/test_simulator.py` | Test hành vi simulator |
 
-Mỗi peer đếm số bản sao của các chunk còn thiếu trong swarm, chọn nhóm chunk có số bản sao ít nhất, sau đó chọn ngẫu nhiên trong nhóm đó.
+---
 
-Ưu điểm: ưu tiên nhân bản chunk hiếm, giảm nguy cơ nghẽn ở cuối mô phỏng.
+## License
 
-Nhược điểm: cần thống kê availability toàn mạng nên phức tạp hơn Random-First.
-
-## Ghi chú triển khai
-
-File `backend/simulation/simpy_compat.py` có fallback rất nhỏ để test trong môi trường không cài được package ngoài. Khi cài `requirements.txt`, simulator sẽ dùng **SimPy thật**.
+Đồ án học thuật — sử dụng theo quy định của lớp 

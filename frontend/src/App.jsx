@@ -289,14 +289,14 @@ export default function App() {
       {activeResult && (
         <>
           <MetricsPanel result={activeResult} compareResult={compareResult} />
-          <section className="grid-two">
-            <PeerProgressTable peers={activeResult.finalPeers} totalChunks={activeResult.config.totalChunks} />
-            <div className="graph-stack">
-              <NeighborGraph
-                graph={activeResult.neighborGraph}
-                peerCount={activeResult.config.peer_count || activeResult.config.peerCount || 10}
-                peers={activeSnapshot?.peers || activeResult.finalPeers}
-              />
+          <section className="peer-visualization">
+            <NeighborGraph
+              graph={activeResult.neighborGraph}
+              peerCount={activeResult.config.peer_count || activeResult.config.peerCount || 10}
+              peers={activeSnapshot?.peers || activeResult.finalPeers}
+            />
+            <div className="grid-two-equal">
+              <PeerProgressTable peers={activeResult.finalPeers} totalChunks={activeResult.config.totalChunks} />
               <PeerNetworkGraph
                 logs={activeResult.logs}
                 peerCount={activeResult.config.peer_count || activeResult.config.peerCount || 10}

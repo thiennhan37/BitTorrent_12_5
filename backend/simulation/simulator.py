@@ -389,13 +389,15 @@ class BitTorrentSimulator:
             if chunk_id is None:
                 break
 
-            source = self.strategy.select_source(peer, self.peers, chunk_id)
-            if source is None:
-                break
-
-            if not self._start_transfer(peer, source, chunk_id):
-                break
-            scheduled += 1
+            started = False
+            for source in self.strategy.ranked_sources(peer, self.peers, chunk_id):
+                if self._start_transfer(peer, source, chunk_id):
+                    scheduled += 1
+                    started = True
+                    break
+            if not started:
+                # Sources were eligible at chunk selection but busy now; try another chunk.
+                continue
         return scheduled
 
     # tiến trình sống lâu dài của mỗi peer

@@ -149,7 +149,7 @@ export default function ConfigPanel({
               </select>
             </div>
             <div className="form-field">
-              <label htmlFor="neighborsPerPeer">Neighbors per peer</label>
+              <label htmlFor="neighborsPerPeer">Base Neighbors peer</label>
               <input
                 id="neighborsPerPeer"
                 type="number"
